@@ -1,0 +1,14 @@
+fastapi[standard]
+sqlmodel
+sqlalchemy
+alembic
+pymysql
+cryptography
+pydantic-settings
+python-multipart
+factur-x
+argon2-cffi>=21.3.0
+passlib>=1.7.4
+python-dotenv
+python-logstash-async
+python-jose[cryptography]

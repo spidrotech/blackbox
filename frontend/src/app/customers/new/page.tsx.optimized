@@ -1,0 +1,136 @@
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { MainLayout } from '@/components/layout';
+import { FormBuilder, type FormConfig } from '@/components/ui';
+import { useForm } from '@/hooks';
+import { customerService } from '@/services/api';
+import { CustomerCreate, CustomerType } from '@/types';
+import { validators } from '@/lib/validators';
+
+const FORM_CONFIG: FormConfig<CustomerCreate> = {
+  fields: [
+    {
+      name: 'customer_type',
+      label: 'Type de client',
+      type: 'select',
+      required: true,
+      options: [
+        { value: 'individual', label: 'Particulier' },
+        { value: 'company', label: 'Entreprise' },
+      ],
+    },
+    {
+      name: 'first_name',
+      label: 'Prénom',
+      type: 'text',
+      placeholder: 'Jean',
+      required: true,
+    },
+    {
+      name: 'last_name',
+      label: 'Nom',
+      type: 'text',
+      placeholder: 'Dupont',
+      required: true,
+    },
+    {
+      name: 'email',
+      label: 'Email',
+      type: 'email',
+      placeholder: 'jean@example.com',
+      required: true,
+    },
+    {
+      name: 'phone',
+      label: 'Téléphone',
+      type: 'tel',
+      placeholder: '01 23 45 67 89',
+    },
+    {
+      name: 'mobile',
+      label: 'Mobile',
+      type: 'tel',
+      placeholder: '06 12 34 56 78',
+    },
+    {
+      name: 'billing_street',
+      label: 'Adresse',
+      type: 'text',
+      placeholder: '123 Rue de la Paix',
+    },
+    {
+      name: 'billing_postal_code',
+      label: 'Code postal',
+      type: 'text',
+      placeholder: '75000',
+    },
+    {
+      name: 'billing_city',
+      label: 'Ville',
+      type: 'text',
+      placeholder: 'Paris',
+    },
+    {
+      name: 'notes',
+      label: 'Notes',
+      type: 'textarea',
+      placeholder: 'Notes additionnelles...',
+      rows: 4,
+    },
+  ],
+};
+
+const INITIAL_DATA: CustomerCreate = {
+  customer_type: 'individual',
+  first_name: '',
+  last_name: '',
+  email: '',
+  phone: '',
+  mobile: '',
+  company_name: '',
+  siret: '',
+  vat_number: '',
+  notes: '',
+  billing_street: '',
+  billing_postal_code: '',
+  billing_city: '',
+  billing_country: 'France',
+};
+
+export default function NewCustomerPage() {
+  const router = useRouter();
+
+  const form = useForm(
+    INITIAL_DATA,
+    async (data) => {
+      const response = await customerService.create(data);
+      if (response.success) {
+        router.push('/customers');
+      }
+    },
+    () => router.push('/customers'),
+    {
+      email: validators.email,
+      phone: validators.phone,
+    }
+  );
+
+  return (
+    <MainLayout>
+      <div className="max-w-2xl mx-auto">
+        <FormBuilder
+          title="Nouveau Client"
+          config={FORM_CONFIG}
+          data={form.data}
+          errors={form.errors}
+          touched={form.touched}
+          isSubmitting={form.isSubmitting}
+          onChange={form.handleChange}
+          onSubmit={form.handleSubmit}
+          submitText="Créer le client"
+        />
+      </div>
+    </MainLayout>
+  );
+}
