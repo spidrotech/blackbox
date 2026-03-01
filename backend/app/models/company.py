@@ -20,6 +20,14 @@ class Company(SQLModel, table=True):
     email: Optional[str] = Field(default=None, max_length=180)
     website: Optional[str] = Field(default=None, max_length=255)
     logo_url: Optional[str] = Field(default=None, max_length=500)
+    # Document and visual settings
+    header_text: Optional[str] = Field(default=None)
+    footer_text: Optional[str] = Field(default=None)
+    visuals_json: Optional[str] = Field(default=None)
+    labels_json: Optional[str] = Field(default=None)
+    quote_defaults_json: Optional[str] = Field(default=None)
+    invoice_defaults_json: Optional[str] = Field(default=None)
+    cgv_url: Optional[str] = Field(default=None, max_length=500)
     
     # Informations bancaires
     iban: Optional[str] = Field(default=None, max_length=34)
@@ -27,6 +35,22 @@ class Company(SQLModel, table=True):
     
     # TVA
     vat_number: Optional[str] = Field(default=None, max_length=20)
+    vat_subject: Optional[bool] = Field(default=True)  # False = non assujetti
+    vat_collection_type: Optional[str] = Field(default=None, max_length=20)  # debit/encaissement
+
+    # Informations juridiques
+    rcs_city: Optional[str] = Field(default=None, max_length=100)
+    rm_number: Optional[str] = Field(default=None, max_length=50)
+    capital: Optional[float] = Field(default=None)
+    ape_code: Optional[str] = Field(default=None, max_length=10)
+
+    # Garantie & Assurance
+    guarantee_type: Optional[str] = Field(default=None, max_length=20)  # biennale/decennale/rc
+    insurance_name: Optional[str] = Field(default=None, max_length=255)
+    insurance_coverage: Optional[str] = Field(default=None, max_length=255)
+    insurance_address: Optional[str] = Field(default=None, max_length=255)
+    insurance_zipcode: Optional[str] = Field(default=None, max_length=10)
+    insurance_city: Optional[str] = Field(default=None, max_length=100)
     
     # Paramètres de facturation
     invoice_prefix: str = Field(default="FA")

@@ -170,12 +170,16 @@ export interface LineItem {
   id?: number;
   designation: string;
   description?: string;
+  long_description?: string;
+  section?: string;
   unit?: string;
   quantity: number;
   unit_price: number;
   vat_rate: number;
   discount_percent?: number;
   item_type: LineItemType;
+  reference?: string;
+  brand?: string;
   position?: number;
   is_optional?: boolean;
   quote_id?: number;
@@ -187,26 +191,65 @@ export interface Quote {
   reference: string;
   status: QuoteStatus;
   quote_date?: string;
-  validity_date?: string;
+  expiry_date?: string;
+  quoteDate?: string;
+  expiryDate?: string;
+  acceptedDate?: string;
+  signedDate?: string;
+  finalizedDate?: string;
   subject?: string;
+  description?: string;
   notes?: string;
   terms_and_conditions?: string;
+  conditions?: string;
+  payment_terms?: string;
+  paymentTerms?: string;
+  footer_notes?: string;
+  bank_details?: string;
+  legal_mentions?: string;
   deposit_percent?: number;
+  depositPercent?: number;
   deposit_amount?: number;
+  depositAmount?: number;
   discount_percent?: number;
+  global_discount_percent?: number;
+  globalDiscountPercent?: number;
   discount_amount?: number;
   cee_premium?: number;
+  ceePremium?: number;
   mpr_premium?: number;
+  mprPremium?: number;
   waste_management_fee?: number;
+  waste_management?: string;
+  work_start_date?: string;
+  workStartDate?: string;
+  estimated_duration?: string;
+  estimatedDuration?: string;
+  worksite_address?: string;
+  worksiteAddress?: string;
   signature_date?: string;
   signed_by?: string;
+  net_after_premiums?: number;
+  netAfterPremiums?: number;
+  total_ht?: number;
+  totalHt?: number;
+  total_tva?: number;
+  totalTva?: number;
+  total_ttc?: number;
+  totalTtc?: number;
+  total?: number;
   customer_id?: number;
+  customerId?: number;
   customer?: Customer;
   project_id?: number;
+  projectId?: number;
   project?: Project;
   company_id?: number;
+  companyId?: number;
   line_items?: LineItem[];
+  lineItems?: LineItem[];
   created_at?: string;
+  createdAt?: string;
   updated_at?: string;
 }
 
@@ -214,24 +257,56 @@ export interface QuoteCreate {
   customer_id: number;
   project_id?: number;
   subject?: string;
+  description?: string;
   notes?: string;
   terms_and_conditions?: string;
+  conditions?: string;
+  payment_terms?: string;
   validity_days?: number;
+  quote_date?: string;
+  expiry_date?: string;
+  work_start_date?: string;
+  estimated_duration?: string;
+  worksite_address?: string;
   deposit_percent?: number;
   discount_percent?: number;
   cee_premium?: number;
   mpr_premium?: number;
   waste_management_fee?: number;
-  line_items?: LineItem[];
+  footer_notes?: string;
+  bank_details?: string;
+  legal_mentions?: string;
+  line_items?: any[];
+}
+
+export interface QuoteStats {
+  total: number;
+  draft: number;
+  sent: number;
+  viewed: number;
+  signed: number;
+  accepted: number;
+  rejected: number;
+  expired: number;
+  cancelled: number;
+  finalized: number;
+  totalAmountHt: number;
+  totalAmountTtc: number;
+  conversionRate: number;
+  expiringIn7Days: number;
+  expiringIn30Days: number;
 }
 
 export interface Invoice {
   id: number;
   reference: string;
   status: InvoiceStatus;
+  // snake_case (direct model fields)
   invoice_date?: string;
   due_date?: string;
+  paid_date?: string;
   subject?: string;
+  description?: string;
   notes?: string;
   terms_and_conditions?: string;
   discount_percent?: number;
@@ -239,6 +314,9 @@ export interface Invoice {
   amount_paid?: number;
   payment_date?: string;
   payment_method?: PaymentMethod;
+  payment_terms?: string;
+  bank_details?: string;
+  invoice_type?: string;
   customer_id?: number;
   customer?: Customer;
   project_id?: number;
@@ -249,6 +327,28 @@ export interface Invoice {
   line_items?: LineItem[];
   created_at?: string;
   updated_at?: string;
+  // camelCase (returned by get_invoice_response)
+  invoiceDate?: string;
+  dueDate?: string;
+  paidDate?: string;
+  amountPaid?: number;
+  remainingAmount?: number;
+  totalHt?: number;
+  totalTva?: number;
+  totalTtc?: number;
+  total?: number;
+  paymentTerms?: string;
+  bankDetails?: string;
+  purchaseOrder?: string;
+  purchase_order?: string;
+  conditions?: string;
+  invoiceType?: string;
+  customerId?: number;
+  projectId?: number;
+  quoteId?: number;
+  companyId?: number;
+  lineItems?: LineItem[];
+  company?: any;
 }
 
 export interface InvoiceCreate {
@@ -260,7 +360,7 @@ export interface InvoiceCreate {
   terms_and_conditions?: string;
   payment_terms_days?: number;
   discount_percent?: number;
-  line_items?: LineItem[];
+  line_items?: any[];
 }
 
 export interface Supplier {

@@ -160,4 +160,11 @@ class SupplierType(str, Enum):
 class LineItemType(str, Enum):
     SUPPLY = "supply"
     LABOR = "labor"
+    WORK = "work"               # Ouvrage
+    SUBCONTRACTING = "subcontracting"  # Sous-traitance
+    EQUIPMENT = "equipment"     # Matériel
+    MISC = "misc"               # Divers
+    SECTION = "section"         # Titre de section (pas de prix)
+    TEXT = "text"               # Texte libre (pas de prix)
+    PAGE_BREAK = "page_break"   # Saut de page
     OTHER = "other"

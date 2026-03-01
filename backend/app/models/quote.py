@@ -97,9 +97,11 @@ class Quote(SQLModel, table=True):
         return self.total_ht + self.total_tva
 
 
+
 class QuoteCreate(SQLModel):
     customer_id: int
     project_id: Optional[int] = None
+    subject: Optional[str] = None
     description: Optional[str] = None
     quote_date: Optional[date] = None
     expiry_date: Optional[date] = None
@@ -111,6 +113,12 @@ class QuoteCreate(SQLModel):
     notes: Optional[str] = None
     payment_terms: Optional[str] = None
     conditions: Optional[str] = None
+    validity_days: Optional[int] = None
+    discount_percent: Optional[float] = None
+    cee_premium: Optional[float] = None
+    mpr_premium: Optional[float] = None
+    waste_management_fee: Optional[float] = None
+    terms_and_conditions: Optional[str] = None
     line_items: Optional[List[dict]] = None
 
 
@@ -144,6 +152,7 @@ class QuoteUpdate(SQLModel):
     project_id: Optional[int] = None
     status: Optional[QuoteStatus] = None
     description: Optional[str] = None
+    subject: Optional[str] = None
     quote_date: Optional[date] = None
     expiry_date: Optional[date] = None
     work_start_date: Optional[date] = None
@@ -151,7 +160,17 @@ class QuoteUpdate(SQLModel):
     worksite_address: Optional[str] = None
     deposit_percent: Optional[Decimal] = None
     deposit_amount: Optional[Decimal] = None
+    global_discount: Optional[Decimal] = None
+    global_discount_percent: Optional[Decimal] = None
+    cee_premium: Optional[Decimal] = None
+    mpr_premium: Optional[Decimal] = None
+    waste_management: Optional[str] = None
     notes: Optional[str] = None
     payment_terms: Optional[str] = None
     conditions: Optional[str] = None
+    terms_and_conditions: Optional[str] = None
+    footer_notes: Optional[str] = None
+    bank_details: Optional[str] = None
+    legal_mentions: Optional[str] = None
+    payment_methods: Optional[str] = None
     line_items: Optional[List[dict]] = None

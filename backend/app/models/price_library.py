@@ -1,4 +1,5 @@
 from sqlmodel import SQLModel, Field
+from sqlalchemy import Column, String
 from typing import Optional, List
 from datetime import date, datetime
 from decimal import Decimal
@@ -17,7 +18,10 @@ class PriceLibraryItem(SQLModel, table=True):
     description: Optional[str] = Field(default=None)
     long_description: Optional[str] = Field(default=None)
     
-    item_type: LineItemType = Field(default=LineItemType.SUPPLY)
+    item_type: LineItemType = Field(
+        default=LineItemType.SUPPLY,
+        sa_column=Column(String(50), nullable=False, default=LineItemType.SUPPLY.value),
+    )
     
     category: Optional[str] = Field(default=None, max_length=100, index=True)
     subcategory: Optional[str] = Field(default=None, max_length=100)

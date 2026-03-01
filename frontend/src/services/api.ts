@@ -11,6 +11,7 @@ import {
   ProjectCreate,
   Quote,
   QuoteCreate,
+  QuoteStats,
   Invoice,
   InvoiceCreate,
   Supplier,
@@ -27,6 +28,9 @@ import {
 } from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
+
+/** Base URL of the API server (without /api/v1), used to resolve relative static file URLs. */
+export const API_BASE_URL = API_URL.replace(/\/api\/v\d+.*$/, '');
 
 // Create axios instance
 const api: AxiosInstance = axios.create({
@@ -122,12 +126,56 @@ export const customerService = {
   },
 
   async create(data: CustomerCreate): Promise<ApiResponse<Customer>> {
-    const response = await api.post<ApiResponse<Customer>>('/customers/', data);
+    // Map frontend fields to backend schema
+    const payload: Record<string, unknown> = {
+      type: data.customer_type,
+      name: data.customer_type === 'company' ? data.company_name : undefined,
+      first_name: data.customer_type === 'individual' ? data.first_name : undefined,
+      last_name: data.customer_type === 'individual' ? data.last_name : undefined,
+      email: data.email || undefined,
+      phone: data.phone || undefined,
+      mobile: data.mobile || undefined,
+      siret: data.siret || undefined,
+      vat: data.vat_number || undefined,
+      notes: data.notes || undefined,
+    };
+    if (data.billing_address) {
+      const ba = data.billing_address as Record<string, string>;
+      payload.address = {
+        street: ba.street || '',
+        city: ba.city || '',
+        postalCode: ba.postal_code || ba.postalCode || '',
+        country: ba.country || 'France',
+      };
+    }
+    const response = await api.post<ApiResponse<Customer>>('/customers/', payload);
     return response.data;
   },
 
-  async update(id: number, data: Partial<CustomerCreate>): Promise<ApiResponse<Customer>> {
-    const response = await api.put<ApiResponse<Customer>>(`/customers/${id}`, data);
+  async update(id: number, data: Record<string, unknown>): Promise<ApiResponse<Customer>> {
+    const kind = data.customer_type as string;
+    const firstName = (data.first_name as string) || '';
+    const lastName = (data.last_name as string) || '';
+    const contactName = `${firstName} ${lastName}`.trim() || undefined;
+    const payload: Record<string, unknown> = {
+      type: kind,
+      name: kind === 'company' ? (data.company_name as string) || undefined : contactName,
+      contact_name: kind === 'company' ? contactName : undefined,
+      email: (data.email as string) || undefined,
+      phone: (data.phone as string) || undefined,
+      mobile: (data.mobile as string) || undefined,
+      siret: (data.siret as string) || undefined,
+      vat: (data.vat_number as string) || undefined,
+      notes: (data.notes as string) || undefined,
+      is_active: data.is_active,
+      address: {
+        street: (data.billing_street as string) || '',
+        city: (data.billing_city as string) || '',
+        postalCode: (data.billing_postal_code as string) || '',
+        country: (data.billing_country as string) || 'France',
+      },
+    };
+    const response = await api.put<ApiResponse<Customer>>(`/customers/${id}`, payload);
     return response.data;
   },
 
@@ -167,8 +215,13 @@ export const projectService = {
 
 // Quote Service
 export const quoteService = {
-  async getAll(): Promise<ApiResponse<Quote[]>> {
-    const response = await api.get<ApiResponse<Quote[]>>('/quotes/');
+  async getAll(params?: { status?: string; customer_id?: number; search?: string }): Promise<ApiResponse<Quote[]>> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.customer_id) query.set('customer_id', String(params.customer_id));
+    if (params?.search) query.set('search', params.search);
+    const qs = query.toString();
+    const response = await api.get<ApiResponse<Quote[]>>(`/quotes/${qs ? '?' + qs : ''}`);
     return response.data;
   },
 
@@ -182,8 +235,18 @@ export const quoteService = {
     return response.data;
   },
 
+  async generatePreviewPdf(data: QuoteCreate): Promise<ApiResponse<string>> {
+    const response = await api.post<ApiResponse<string>>('/quotes/preview-pdf', data);
+    return response.data;
+  },
+
   async update(id: number, data: Partial<QuoteCreate>): Promise<ApiResponse<Quote>> {
     const response = await api.put<ApiResponse<Quote>>(`/quotes/${id}`, data);
+    return response.data;
+  },
+
+  async updateStatus(id: number, status: string): Promise<ApiResponse<Quote>> {
+    const response = await api.patch<ApiResponse<Quote>>(`/quotes/${id}/status?status=${status}`);
     return response.data;
   },
 
@@ -196,6 +259,43 @@ export const quoteService = {
     const response = await api.post<ApiResponse<Invoice>>(`/quotes/${id}/convert-to-invoice`);
     return response.data;
   },
+
+  async duplicate(id: number): Promise<ApiResponse<Quote>> {
+    const response = await api.post<ApiResponse<Quote>>(`/quotes/${id}/duplicate`);
+    return response.data;
+  },
+
+  async send(id: number): Promise<ApiResponse<{ quote: Quote; pdfBase64: string | null; customerEmail: string | null; filename: string }>> {
+    const response = await api.post(`/quotes/${id}/send`);
+    return response.data;
+  },
+
+  async getStats(): Promise<ApiResponse<QuoteStats>> {
+    const response = await api.get<ApiResponse<QuoteStats>>('/quotes/stats');
+    return response.data;
+  },
+
+  async downloadPdf(id: number, reference?: string): Promise<void> {
+    const response = await api.get(`/quotes/${id}/pdf`, { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${reference || 'devis-' + id}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  async getPdfBlobUrl(id: number): Promise<string> {
+    const response = await api.get(`/quotes/${id}/pdf`, { responseType: 'blob' });
+    return window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+  },
+
+  getPdfUrl(id: number): string {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : '';
+    return `${API_URL}/quotes/${id}/pdf?token=${token}`;
+  },
 };
 
 // Invoice Service
@@ -206,8 +306,13 @@ export const invoiceService = {
   },
 
   async getById(id: number): Promise<ApiResponse<Invoice>> {
-    const response = await api.get<ApiResponse<Invoice>>(`/invoices/${id}`);
-    return response.data;
+    const response = await api.get<any>(`/invoices/${id}`);
+    const body = response.data;
+    // backend returns { success, data } or { success, invoice } — normalise
+    if (body.data === undefined && body.invoice !== undefined) {
+      body.data = body.invoice;
+    }
+    return body as ApiResponse<Invoice>;
   },
 
   async create(data: InvoiceCreate): Promise<ApiResponse<Invoice>> {
@@ -236,6 +341,23 @@ export const invoiceService = {
   async send(id: number): Promise<ApiResponse<Invoice>> {
     const response = await api.post<ApiResponse<Invoice>>(`/invoices/${id}/send`);
     return response.data;
+  },
+
+  async updateStatus(id: number, status: string): Promise<ApiResponse<Invoice>> {
+    const response = await api.patch<ApiResponse<Invoice>>(`/invoices/${id}/status`, { status });
+    return response.data;
+  },
+
+  async downloadPdf(id: number, reference: string): Promise<void> {
+    const response = await api.get(`/invoices/${id}/pdf`, { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${reference}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   },
 };
 
@@ -513,3 +635,34 @@ export const dashboardService = {
 };
 
 export default api;
+
+// Settings service
+export const settingsService = {
+  async getCompany(): Promise<ApiResponse<any>> {
+    const response = await api.get<ApiResponse<any>>('/settings/company');
+    return response.data;
+  },
+
+  async updateCompany(data: any): Promise<ApiResponse<any>> {
+    const response = await api.put<ApiResponse<any>>('/settings/company', data);
+    return response.data;
+  },
+
+  async uploadLogo(file: File): Promise<ApiResponse<any>> {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await api.post('/settings/company/logo', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  async uploadCgv(file: File): Promise<ApiResponse<any>> {
+    const form = new FormData();
+    form.append('file', file);
+    const response = await api.post('/settings/company/cgv', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+};

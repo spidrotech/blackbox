@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlmodel import Session, select
 from typing import List, Optional
 from datetime import datetime, date, timedelta
@@ -9,7 +9,7 @@ from app.models import (
     Invoice, InvoiceCreate, InvoiceUpdate, PaymentCreate,
     LineItem, Customer, Project, Company, User
 )
-from app.models.enums import InvoiceStatus
+from app.models.enums import InvoiceStatus, LineItemType
 from app.core.security import get_current_user_required
 
 router = APIRouter()
@@ -37,7 +37,43 @@ def get_invoice_response(invoice: Invoice, session: Session) -> dict:
     if invoice.customer_id:
         cust = session.get(Customer, invoice.customer_id)
         if cust:
-            customer = {"id": cust.id, "name": cust.name, "email": cust.email}
+            customer = {
+                "id": cust.id,
+                "name": cust.name,
+                "contact_name": cust.contact_name,
+                "email": cust.email,
+                "phone": cust.phone,
+                "mobile": cust.mobile,
+                "vat": cust.vat,
+                "siret": cust.siret,
+            }
+
+    company = None
+    if invoice.company_id:
+        comp = session.get(Company, invoice.company_id)
+        if comp:
+            company = {
+                "id": comp.id,
+                "name": comp.name,
+                "siret": comp.siret,
+                "address": comp.address,
+                "city": comp.city,
+                "postalCode": comp.postal_code,
+                "phone": comp.phone,
+                "email": comp.email,
+                "website": comp.website,
+                "vatNumber": comp.vat_number,
+                "vatSubject": comp.vat_subject,
+                "vatCollectionType": comp.vat_collection_type,
+                "iban": comp.iban,
+                "bic": comp.bic,
+                "rcsCity": comp.rcs_city,
+                "capital": comp.capital,
+                "legalMentions": comp.legal_mentions,
+                "logoUrl": comp.logo_url,
+                "defaultConditions": comp.default_conditions,
+                "defaultPaymentTerms": comp.default_payment_terms,
+            }
     
     # Récupérer les lignes
     statement = select(LineItem).where(LineItem.invoice_id == invoice.id).order_by(LineItem.display_order)
@@ -62,17 +98,19 @@ def get_invoice_response(invoice: Invoice, session: Session) -> dict:
         items.append({
             "id": item.id,
             "description": item.description,
-            "longDescription": item.long_description,
-            "itemType": item.item_type.value,
+            "designation": item.description,
+            "long_description": item.long_description,
+            "item_type": item.item_type.value if hasattr(item.item_type, "value") else str(item.item_type),
             "quantity": float(item.quantity),
             "unit": item.unit,
-            "unitPrice": float(item.unit_price),
+            "unit_price": float(item.unit_price),
             "discount": float(item.discount) if item.discount else None,
-            "discountPercent": float(item.discount_percent) if item.discount_percent else None,
-            "taxRate": float(item.tax_rate),
-            "totalHt": float(item_ht),
-            "totalTva": float(item_tva),
-            "displayOrder": item.display_order,
+            "discount_percent": float(item.discount_percent) if item.discount_percent else None,
+            "vat_rate": float(item.tax_rate),
+            "reference": item.reference,
+            "total_ht": float(item_ht),
+            "total_tva": float(item_tva),
+            "display_order": item.display_order,
         })
     
     total_ttc = total_ht + total_tva
@@ -86,7 +124,7 @@ def get_invoice_response(invoice: Invoice, session: Session) -> dict:
         "projectId": invoice.project_id,
         "quoteId": invoice.quote_id,
         "reference": invoice.reference,
-        "status": invoice.status.value,
+        "status": invoice.status.value if hasattr(invoice.status, "value") else str(invoice.status),
         "description": invoice.description,
         "invoiceDate": invoice.invoice_date.isoformat() if invoice.invoice_date else None,
         "dueDate": invoice.due_date.isoformat() if invoice.due_date else None,
@@ -95,6 +133,8 @@ def get_invoice_response(invoice: Invoice, session: Session) -> dict:
         "notes": invoice.notes,
         "paymentTerms": invoice.payment_terms,
         "bankDetails": invoice.bank_details,
+        "purchaseOrder": invoice.purchase_order,
+        "conditions": invoice.conditions,
         "invoiceType": invoice.invoice_type,
         "totalHt": float(total_ht),
         "totalTva": float(total_tva),
@@ -103,6 +143,8 @@ def get_invoice_response(invoice: Invoice, session: Session) -> dict:
         "remainingAmount": float(remaining),
         "createdAt": invoice.created_at.isoformat(),
         "customer": customer,
+        "company": company,
+        "line_items": items,
         "lineItems": items,
     }
 
@@ -154,10 +196,12 @@ def get_invoice(
     invoice = session.get(Invoice, invoice_id)
     if not invoice or invoice.company_id != current_user.company_id:
         raise HTTPException(status_code=404, detail="Facture non trouvée")
-    
+
+    invoice_data = get_invoice_response(invoice, session)
     return {
         "success": True,
-        "invoice": get_invoice_response(invoice, session)
+        "data": invoice_data,
+        "invoice": invoice_data,
     }
 
 
@@ -189,6 +233,8 @@ def create_invoice(
         notes=invoice_data.notes,
         payment_terms=invoice_data.payment_terms,
         bank_details=invoice_data.bank_details,
+        purchase_order=invoice_data.purchase_order,
+        conditions=invoice_data.conditions,
         invoice_type=invoice_data.invoice_type,
         created_by_id=current_user.id,
     )
@@ -199,17 +245,25 @@ def create_invoice(
     # Ajouter les lignes
     if invoice_data.line_items:
         for i, item_data in enumerate(invoice_data.line_items):
+            raw_type = item_data.get("item_type") or "supply"
+            try:
+                resolved_type = LineItemType(raw_type)
+            except ValueError:
+                resolved_type = LineItemType.SUPPLY
+            is_structural = resolved_type in (
+                LineItemType.SECTION, LineItemType.TEXT, LineItemType.PAGE_BREAK
+            )
             line_item = LineItem(
                 invoice_id=invoice.id,
-                description=item_data.get("description", ""),
-                long_description=item_data.get("longDescription"),
-                item_type=item_data.get("itemType", "supply"),
-                quantity=Decimal(str(item_data.get("quantity", 1))),
+                description=item_data.get("designation") or item_data.get("description") or "",
+                long_description=item_data.get("long_description"),
+                item_type=resolved_type,
+                quantity=Decimal(str(item_data.get("quantity") or 0)) if is_structural else Decimal(str(item_data.get("quantity") or 1)),
                 unit=item_data.get("unit", "u"),
-                unit_price=Decimal(str(item_data.get("unitPrice", 0))),
+                unit_price=Decimal(str(item_data.get("unit_price") or 0)),
                 discount=Decimal(str(item_data["discount"])) if item_data.get("discount") else None,
-                discount_percent=Decimal(str(item_data["discountPercent"])) if item_data.get("discountPercent") else None,
-                tax_rate=Decimal(str(item_data.get("taxRate", 20))),
+                discount_percent=Decimal(str(item_data.get("discount_percent") or 0)) if item_data.get("discount_percent") else None,
+                tax_rate=Decimal(str(item_data.get("vat_rate") or 20)),
                 reference=item_data.get("reference"),
                 brand=item_data.get("brand"),
                 model=item_data.get("model"),
@@ -242,6 +296,9 @@ def update_invoice(
     line_items_data = update_data.pop("line_items", None)
     
     for key, value in update_data.items():
+        # Ne jamais écraser customer_id avec 0 (FK violation) ou None
+        if key == "customer_id" and not value:
+            continue
         setattr(invoice, key, value)
     
     invoice.updated_at = datetime.utcnow()
@@ -256,17 +313,25 @@ def update_invoice(
         
         # Ajouter les nouvelles
         for i, item_data in enumerate(line_items_data):
+            raw_type = item_data.get("item_type") or "supply"
+            try:
+                resolved_type = LineItemType(raw_type)
+            except ValueError:
+                resolved_type = LineItemType.SUPPLY
+            is_structural = resolved_type in (
+                LineItemType.SECTION, LineItemType.TEXT, LineItemType.PAGE_BREAK
+            )
             line_item = LineItem(
                 invoice_id=invoice.id,
-                description=item_data.get("description", ""),
-                long_description=item_data.get("longDescription"),
-                item_type=item_data.get("itemType", "supply"),
-                quantity=Decimal(str(item_data.get("quantity", 1))),
+                description=item_data.get("designation") or item_data.get("description") or "",
+                long_description=item_data.get("long_description"),
+                item_type=resolved_type,
+                quantity=Decimal(str(item_data.get("quantity") or 0)) if is_structural else Decimal(str(item_data.get("quantity") or 1)),
                 unit=item_data.get("unit", "u"),
-                unit_price=Decimal(str(item_data.get("unitPrice", 0))),
+                unit_price=Decimal(str(item_data.get("unit_price") or 0)),
                 discount=Decimal(str(item_data["discount"])) if item_data.get("discount") else None,
-                discount_percent=Decimal(str(item_data["discountPercent"])) if item_data.get("discountPercent") else None,
-                tax_rate=Decimal(str(item_data.get("taxRate", 20))),
+                discount_percent=Decimal(str(item_data.get("discount_percent") or 0)) if item_data.get("discount_percent") else None,
+                tax_rate=Decimal(str(item_data.get("vat_rate") or 20)),
                 reference=item_data.get("reference"),
                 brand=item_data.get("brand"),
                 model=item_data.get("model"),
@@ -337,6 +402,35 @@ def send_invoice(
         session.commit()
         session.refresh(invoice)
     
+    return {
+        "success": True,
+        "invoice": get_invoice_response(invoice, session)
+    }
+
+
+@router.patch("/{invoice_id}/status", response_model=dict)
+def update_invoice_status(
+    invoice_id: int,
+    status: str = Body(..., embed=True),
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session)
+):
+    """Met à jour le statut d'une facture"""
+    invoice = session.get(Invoice, invoice_id)
+    if not invoice or invoice.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+
+    try:
+        new_status = InvoiceStatus(status)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Statut invalide: {status}")
+
+    invoice.status = new_status
+    invoice.updated_at = datetime.utcnow()
+    session.add(invoice)
+    session.commit()
+    session.refresh(invoice)
+
     return {
         "success": True,
         "invoice": get_invoice_response(invoice, session)

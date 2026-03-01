@@ -44,6 +44,8 @@ class Invoice(SQLModel, table=True):
     notes: Optional[str] = Field(default=None)
     payment_terms: Optional[str] = Field(default=None)
     bank_details: Optional[str] = Field(default=None)
+    purchase_order: Optional[str] = Field(default=None, max_length=100)  # N° bon de commande client
+    conditions: Optional[str] = Field(default=None)  # CGV / conditions générales
     
     # Type de facture
     invoice_type: str = Field(default="invoice", max_length=50)  # invoice, credit_note, proforma
@@ -95,6 +97,8 @@ class InvoiceCreate(SQLModel):
     notes: Optional[str] = None
     payment_terms: Optional[str] = None
     bank_details: Optional[str] = None
+    purchase_order: Optional[str] = None
+    conditions: Optional[str] = None
     invoice_type: str = "invoice"
     line_items: Optional[List[dict]] = None
 
@@ -133,6 +137,8 @@ class InvoiceUpdate(SQLModel):
     notes: Optional[str] = None
     payment_terms: Optional[str] = None
     bank_details: Optional[str] = None
+    purchase_order: Optional[str] = None
+    conditions: Optional[str] = None
     line_items: Optional[List[dict]] = None
 
 

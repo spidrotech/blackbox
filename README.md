@@ -12,41 +12,38 @@ Application web complète pour la gestion d'entreprises artisanales avec suivi d
 
 ## 🚀 Quick Start
 
-### Prérequis
-- Docker & Docker Compose
-- Windows PowerShell (pour les commandes fournies) ou terminal standard
-
-### Installation & Démarrage
-
 ```powershell
-# Aller dans le répertoire blackbox
 cd c:\workspace\blackbox
-
-# Lancer tous les services
-docker-compose up -d
-
-# Attendre 30 secondes que tout soit initialisé
-# Les services seront accessibles sur:
-# - Frontend: http://localhost:3001
-# - Backend API: http://localhost:8001
-# - PhpMyAdmin: http://localhost:8080
-# - Kibana: http://localhost:5601
+.\infra\scripts\start.ps1
 ```
 
-### Arrêter les services
+**Accès:**
+- Frontend: http://gestar.localhost:8000
+- Backend API: http://api.localhost:8000/api/v1
+- Traefik Dashboard: http://localhost:8888
+- MySQL: `localhost:3306` (port local exposé)
+- phpmyadmin: http://phpmyadmin.localhost:8000 
 
-```powershell
-docker-compose down
-```
+**Test Account:**
+- Email: `test@gmail.com`
+- Password: `000000`
 
-## 📝 Identifiants par défaut
+**Arrêter** (données préservées): `.\infra\scripts\stop.ps1`
 
-Pour tester l'application, utilisez:
+**Redémarrer**: `.\infra\scripts\start.ps1`
 
-- **Email**: test@gmail.com
-- **Mot de passe**: 000000
+**Réinitialiser** (DANGER!): `.\infra\scripts\reset.ps1`
 
-Ces identifiants sont créés automatiquement lors du premier démarrage.
+---
+
+Les données sont stockées dans `./data/mysql/` et `./data/elasticsearch/` et persistent après arrêt des services.
+
+## 🔄 Démarrage/Arrêt Quotidien
+
+1. **Fermeture du jour**: `.\infra\scripts\stop.ps1` (données conservées)
+2. **Ouverture le lendemain**: `.\infra\scripts\start.ps1` (récupère les données)
+
+Tous vos clients, devis, factures, etc. seront disponibles immédiatement! ✅
 
 ## 📊 Structure du Projet
 
@@ -118,28 +115,30 @@ blackbox/
 Fichier `.env`:
 ```env
 # Database
-DATABASE_URL=mysql+pymysql://root:rootpassword@localhost:3306/gestar_db?charset=utf8mb4
+DATABASE_URL=mysql+pymysql://root:rootpassword@gestar_db:3306/gestar_db?charset=utf8mb4
 
 # JWT
 SECRET_KEY=your-secret-key-here
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
 
-# API
-API_URL=http://localhost:8001/api/v1
-NEXT_PUBLIC_API_URL=http://localhost:8001/api/v1
+# API (via Traefik)
+API_URL=http://api.localhost:8000/api/v1
+NEXT_PUBLIC_API_URL=http://api.localhost:8000/api/v1
 ```
 
 ## 🗂️ Services Docker
 
-| Service | Port | Description |
-|---------|------|-------------|
-| frontend | 3001 | Application Next.js |
-| backend | 8001 | API FastAPI |
-| mysql | 3306 | Base de données |
-| phpmyadmin | 8080 | Gestion DB UI |
-| elasticsearch | 9200 | Logs indexés |
-| logstash | 5000 | Ingestion logs |
-| kibana | 5601 | Visualisation logs |
+| Service | Accès | Port Interne | Description |
+|---------|-------|--------------|-------------|
+| Traefik | localhost:8000 | - | Reverse proxy & load balancer |
+| Traefik Dashboard | localhost:8888 | 8080 | Gestion routes & services |
+| Frontend | gestar.localhost:8000 | 3001 | Application Next.js |
+| Backend | api.localhost:8000 | 8001 | API FastAPI |
+| PhpMyAdmin | phpmyadmin.localhost:8000 | 80 | Gestion DB (user/pass) |
+| MySQL | localhost:3306 | 3306 | Base de données |
+| Elasticsearch | (*via logs*) | 9200 | Logs indexés |
+| Logstash | (*via logs*) | 5000 | Ingestion logs |
+| Kibana | (*via logs*) | 5601 | Visualisation logs |
 
 ## 📚 Développement
 
@@ -184,13 +183,14 @@ npm run dev
 docker-compose down
 
 # Ou arrêter un port spécifique
-netstat -ano | findstr :3001  # Trouver le PID
+netstat -ano | findstr :8000  # Traefik main port
 taskkill /PID <PID> /F         # Tuer le processus
 ```
 
 ## 📖 Documentation Complète
 
-- **API Swagger**: http://localhost:8001/docs
+- **API Swagger**: http://api.localhost:8000/docs
+- **Traefik Dashboard**: http://localhost:8888
 - **Migrations**: Voir `backend/alembic/versions/`
 - **Types Frontend**: `frontend/src/types/index.ts`
 - **Modèles Backend**: `backend/app/models/`

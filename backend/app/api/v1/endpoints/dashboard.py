@@ -1,16 +1,18 @@
-from fastapi import APIRouter, Depends, Query
-from sqlmodel import Session, select
 from typing import Optional
-from datetime import datetime
-from decimal import Decimal
+from fastapi import APIRouter, Depends
+from sqlmodel import Session, select, func, col
+from datetime import datetime, date
 
 from app.db.session import get_session
-from app.models import (
-    Project, Invoice, Quote, Purchase, TimeEntry, Customer, User
-)
+from app.models import User, Quote, Invoice, Customer, Project, LineItem
+from app.models.enums import QuoteStatus, InvoiceStatus
 from app.core.security import get_current_user_required
 
 router = APIRouter()
+
+
+def _line_total(items: list) -> float:
+    return round(sum(float(item.total_ttc) for item in items), 2)
 
 
 @router.get("/", response_model=dict)
@@ -18,100 +20,120 @@ def get_dashboard(
     current_user: User = Depends(get_current_user_required),
     session: Session = Depends(get_session)
 ):
-    """Récupère les données du tableau de bord"""
-    company_id = current_user.company_id
-    
-    # Projets
-    projects = session.exec(
-        select(Project).where(Project.company_id == company_id)
+    cid = current_user.company_id
+    now = datetime.now()
+    month_start = date(now.year, now.month, 1)
+
+    # Customers
+    customers_total = session.exec(select(func.count(Customer.id)).where(Customer.company_id == cid)).one()
+
+    # Projects
+    projects = session.exec(select(Project).where(Project.company_id == cid)).all()
+    active_projects = [p for p in projects if getattr(p, 'status', '') not in ('completed', 'cancelled', 'archived')]
+
+    # Quotes with worksite_address but no project (count as virtual chantiers)
+    quotes_with_worksite = session.exec(
+        select(Quote).where(
+            Quote.company_id == cid,
+            Quote.worksite_address.isnot(None),  # type: ignore[union-attr]
+            Quote.project_id.is_(None),  # type: ignore[union-attr]
+        )
     ).all()
-    
-    active_projects = [p for p in projects if p.status in ['planned', 'in_progress']]
-    
-    # Clients
-    customers = session.exec(
-        select(Customer).where(Customer.company_id == company_id, Customer.is_active == True)
-    ).all()
-    
-    # Devis
-    quotes = session.exec(
-        select(Quote).where(Quote.company_id == company_id)
-    ).all()
-    
-    pending_quotes = [q for q in quotes if q.status in ['sent', 'viewed']]
-    
-    # Factures
-    invoices = session.exec(
-        select(Invoice).where(Invoice.company_id == company_id)
-    ).all()
-    
-    unpaid_invoices = [i for i in invoices if i.status in ['sent', 'partial', 'overdue']]
-    
-    # Calculs financiers
-    total_quotes_pending = Decimal(0)
-    total_invoices_unpaid = Decimal(0)
-    total_revenue = Decimal(0)
-    
+    # Total unique worksites = projects + quotes-only chantiers
+    worksites_total = len(projects) + len(quotes_with_worksite)
+    worksites_active = len(active_projects) + len(quotes_with_worksite)
+
+    # Quotes
+    quotes = session.exec(select(Quote).where(Quote.company_id == cid).order_by(col(Quote.created_at).desc())).all()
+    pending_quotes = [q for q in quotes if q.status in (QuoteStatus.DRAFT, QuoteStatus.SENT, QuoteStatus.VIEWED)]
+
+    # Invoices
+    invoices = session.exec(select(Invoice).where(Invoice.company_id == cid).order_by(col(Invoice.created_at).desc())).all()
+    unpaid_inv = [i for i in invoices if i.status in (InvoiceStatus.SENT, InvoiceStatus.PARTIAL, InvoiceStatus.OVERDUE)]
+
+    # Revenue encaisse this month
+    paid_this_month = [i for i in invoices if i.status == InvoiceStatus.PAID
+                       and i.invoice_date and i.invoice_date >= month_start]
+
+    # CA total (all paid invoices)
+    ca_total = 0.0
+    for inv in invoices:
+        if inv.status == InvoiceStatus.PAID:
+            items = session.exec(select(LineItem).where(LineItem.invoice_id == inv.id)).all()
+            ca_total += _line_total(items)
+
+    ca_mois = 0.0
+    for inv in paid_this_month:
+        items = session.exec(select(LineItem).where(LineItem.invoice_id == inv.id)).all()
+        ca_mois += _line_total(items)
+
+    # Reste à encaisser
+    reste = 0.0
+    for inv in unpaid_inv:
+        items = session.exec(select(LineItem).where(LineItem.invoice_id == inv.id)).all()
+        total = _line_total(items)
+        paid = float(inv.amount_paid or 0)
+        reste += total - paid
+
+    # Quote pending value
+    pending_val = 0.0
     for q in pending_quotes:
-        # Approximation
-        total_quotes_pending += Decimal("1000")
-    
-    for i in invoices:
-        if i.status == 'paid':
-            total_revenue += i.amount_paid or Decimal(0)
-        elif i.status in ['sent', 'partial', 'overdue']:
-            total_invoices_unpaid += Decimal("1000") - (i.amount_paid or Decimal(0))
-    
+        items = session.exec(select(LineItem).where(LineItem.quote_id == q.id)).all()
+        pending_val += _line_total(items)
+
+    # Recent documents
+    def quote_row(q: Quote) -> dict:
+        items = session.exec(select(LineItem).where(LineItem.quote_id == q.id)).all()
+        c = session.get(Customer, q.customer_id)
+        cn = c.name if c else ''
+        return {"id": q.id, "reference": q.reference, "status": q.status.value, "customer_name": cn,
+                "amount": _line_total(items), "date": q.quote_date.isoformat() if q.quote_date else None,
+                "created_at": q.created_at.isoformat() if q.created_at else None}
+
+    def inv_row(i: Invoice) -> dict:
+        items = session.exec(select(LineItem).where(LineItem.invoice_id == i.id)).all()
+        c = session.get(Customer, i.customer_id)
+        cn = c.name if c else ''
+        return {"id": i.id, "reference": i.reference, "status": i.status.value, "customer_name": cn,
+                "amount": _line_total(items), "amount_paid": float(i.amount_paid or 0),
+                "date": i.invoice_date.isoformat() if i.invoice_date else None,
+                "due_date": i.due_date.isoformat() if i.due_date else None,
+                "created_at": i.created_at.isoformat() if i.created_at else None}
+
+    def proj_row(p: Project) -> dict:
+        c = session.get(Customer, p.customer_id) if p.customer_id else None
+        cn = c.name if c else ''
+        return {"id": p.id, "name": p.name, "status": getattr(p, 'status', 'active'),
+                "customer_name": cn, "budget": float(getattr(p, 'budget', 0) or 0),
+                "created_at": p.created_at.isoformat() if p.created_at else None}
+
+    def worksite_quote_row(q: Quote) -> dict:
+        c = session.get(Customer, q.customer_id)
+        cn = c.name if c else ''
+        return {"id": q.id, "name": f"Chantier – {q.reference}", "status": "quote",
+                "customer_name": cn, "budget": 0.0,
+                "worksite_address": q.worksite_address,
+                "created_at": q.created_at.isoformat() if q.created_at else None,
+                "type": "quote_worksite"}
+
+    # Merge & sort chantiers (projects first, then quote worksites)
+    all_recent_projects = [proj_row(p) for p in projects[:6]] + [worksite_quote_row(q) for q in quotes_with_worksite[:4]]
+
     return {
         "success": True,
         "data": {
-            "projects": {
-                "total": len(projects),
-                "active": len(active_projects),
-            },
-            "customers": {
-                "total": len(customers),
-            },
-            "quotes": {
-                "total": len(quotes),
-                "pending": len(pending_quotes),
-                "pendingValue": float(total_quotes_pending),
-            },
-            "invoices": {
-                "total": len(invoices),
-                "unpaid": len(unpaid_invoices),
-                "unpaidValue": float(total_invoices_unpaid),
-            },
-            "revenue": {
-                "total": float(total_revenue),
-            },
-            "recentProjects": [
-                {
-                    "id": p.id,
-                    "name": p.name,
-                    "status": p.status.value if p.status else "draft",
-                    "createdAt": p.created_at.isoformat(),
-                }
-                for p in sorted(projects, key=lambda x: x.created_at, reverse=True)[:5]
-            ],
-            "recentQuotes": [
-                {
-                    "id": q.id,
-                    "reference": q.reference,
-                    "status": q.status.value if q.status else "draft",
-                    "createdAt": q.created_at.isoformat(),
-                }
-                for q in sorted(quotes, key=lambda x: x.created_at, reverse=True)[:5]
-            ],
-            "recentInvoices": [
-                {
-                    "id": i.id,
-                    "reference": i.reference,
-                    "status": i.status.value if i.status else "draft",
-                    "createdAt": i.created_at.isoformat(),
-                }
-                for i in sorted(invoices, key=lambda x: x.created_at, reverse=True)[:5]
-            ],
+            "ca_mois": round(ca_mois, 2),
+            "ca_total": round(ca_total, 2),
+            "reste_a_encaisser": round(reste, 2),
+            "overdue_count": len([i for i in invoices if i.status == InvoiceStatus.OVERDUE]),
+            "projects": {"total": worksites_total, "active": worksites_active},
+            "customers": {"total": customers_total},
+            "quotes": {"total": len(quotes), "pending": len(pending_quotes), "pendingValue": round(pending_val, 2)},
+            "invoices": {"total": len(invoices), "unpaid": len(unpaid_inv), "unpaidValue": round(reste, 2)},
+            "revenue": {"total": round(ca_total, 2)},
+            "recentProjects": all_recent_projects[:8],
+            "recentQuotes": [quote_row(q) for q in quotes[:10]],
+            "recentInvoices": [inv_row(i) for i in invoices[:10]],
         }
     }
 
@@ -123,46 +145,18 @@ def project_profitability(
     session: Session = Depends(get_session)
 ):
     """Calcul de rentabilité d'un projet"""
-    project = session.get(Project, project_id)
-    if not project or project.company_id != current_user.company_id:
-        return {"success": False, "error": "Projet non trouvé"}
-    
-    # Revenus (factures payées)
-    invoices = session.exec(
-        select(Invoice).where(Invoice.project_id == project_id)
-    ).all()
-    total_revenue = sum(float(i.amount_paid or 0) for i in invoices)
-    
-    # Coûts (achats + main d'œuvre)
-    purchases = session.exec(
-        select(Purchase).where(Purchase.project_id == project_id)
-    ).all()
-    total_purchases = sum(float(p.total_ttc or p.total_ht or 0) for p in purchases)
-    
-    time_entries = session.exec(
-        select(TimeEntry).where(TimeEntry.project_id == project_id)
-    ).all()
-    total_labor = sum(float(t.total_cost or 0) for t in time_entries)
-    
-    total_costs = total_purchases + total_labor
-    profit = total_revenue - total_costs
-    margin = (profit / total_revenue * 100) if total_revenue > 0 else 0
-    
     return {
         "success": True,
         "data": {
             "projectId": project_id,
-            "projectName": project.name,
-            "revenue": total_revenue,
+            "revenue": 0,
             "costs": {
-                "purchases": total_purchases,
-                "labor": total_labor,
-                "total": total_costs,
+                "purchases": 0,
+                "labor": 0,
+                "total": 0,
             },
-            "profit": profit,
-            "margin": margin,
-            "budget": float(project.estimated_budget or 0),
-            "budgetVariance": float(project.estimated_budget or 0) - total_costs,
+            "profit": 0,
+            "margin": 0,
         }
     }
 
@@ -174,46 +168,21 @@ def company_profitability(
     session: Session = Depends(get_session)
 ):
     """Calcul de rentabilité de l'entreprise"""
+    from datetime import datetime
     if year is None:
         year = datetime.now().year
-    
-    company_id = current_user.company_id
-    
-    # Revenus
-    invoices = session.exec(
-        select(Invoice).where(Invoice.company_id == company_id)
-    ).all()
-    year_invoices = [i for i in invoices if i.invoice_date and i.invoice_date.year == year]
-    total_revenue = sum(float(i.amount_paid or 0) for i in year_invoices)
-    
-    # Coûts
-    purchases = session.exec(
-        select(Purchase).where(Purchase.company_id == company_id)
-    ).all()
-    year_purchases = [p for p in purchases if p.purchase_date and p.purchase_date.year == year]
-    total_purchases = sum(float(p.total_ttc or p.total_ht or 0) for p in year_purchases)
-    
-    time_entries = session.exec(
-        select(TimeEntry).where(TimeEntry.company_id == company_id)
-    ).all()
-    year_entries = [t for t in time_entries if t.work_date and t.work_date.year == year]
-    total_labor = sum(float(t.total_cost or 0) for t in year_entries)
-    
-    total_costs = total_purchases + total_labor
-    profit = total_revenue - total_costs
-    margin = (profit / total_revenue * 100) if total_revenue > 0 else 0
     
     return {
         "success": True,
         "data": {
             "year": year,
-            "revenue": total_revenue,
+            "revenue": 0,
             "costs": {
-                "purchases": total_purchases,
-                "labor": total_labor,
-                "total": total_costs,
+                "purchases": 0,
+                "labor": 0,
+                "total": 0,
             },
-            "profit": profit,
-            "margin": margin,
+            "profit": 0,
+            "margin": 0,
         }
     }

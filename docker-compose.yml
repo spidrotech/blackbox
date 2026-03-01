@@ -1,47 +1,38 @@
 services:
   traefik:
     image: traefik:v3.0
-    container_name: gestar_traefik_v2
-    restart: always
+    container_name: gestar_traefik
+    restart: unless-stopped
     command:
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
+      - "--configFile=/etc/traefik/traefik.yml"
     ports:
-      - "8002:81"
+      - "8000:8000"
       - "8888:8080"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik-dynamic.yml:/etc/traefik/dynamic.yml:ro
     networks:
       - gestar_network
-    labels:
-      - "traefik.enable=true"
 
   db:
     image: mysql:8.0
-    container_name: gestar_db_v2
+    container_name: gestar_db
     restart: always
+    env_file:
+      - .env
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MYSQL_USER: ${DB_USER}
       MYSQL_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: ${DB_NAME}
-    ports:
-      - "3306:3306"
     volumes:
-      - mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - ./data/mysql:/var/lib/mysql # Bind mount pour voir les fichiers sur ton PC
     networks:
       - gestar_network
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
-    container_name: gestar_elasticsearch_v2
+    container_name: gestar_es
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
@@ -51,95 +42,56 @@ services:
         soft: -1
         hard: -1
     volumes:
-      - esdata:/usr/share/elasticsearch/data
-    ports:
-      - "9200:9200"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\"'"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - gestar_network
-
-  logstash:
-    image: docker.elastic.co/logstash/logstash:8.13.0
-    container_name: gestar_logstash_v2
-    volumes:
-      - ./logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
-    ports:
-      - "5000:5000"
-      - "5044:5044"
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
+      - ./data/elasticsearch:/usr/share/elasticsearch/data
     networks:
       - gestar_network
 
   backend:
     build: ./backend
-    container_name: gestar_api_v2
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
-    volumes:
-      - ./backend:/app
+    container_name: gestar_api
     ports:
       - "8001:8001"
+    volumes:
+      - ./backend:/app
     env_file:
       - .env
     depends_on:
-      db:
-        condition: service_healthy
-      elasticsearch:
-        condition: service_healthy
+      - db
+      - elasticsearch
     networks:
       - gestar_network
 
   frontend:
     build: ./frontend
-    container_name: gestar_web_v2
-    command: npm run dev
+    container_name: gestar_web
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    ports:
-      - "3001:3001"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8001/api/v1
+      - NEXT_PUBLIC_API_URL=http://api.localhost:8000/api/v1
     depends_on:
       - backend
     networks:
       - gestar_network
 
   phpmyadmin:
-    image: phpmyadmin:latest
-    container_name: gestar_phpmyadmin_v2
-    restart: always
+    image: phpmyadmin:5.2
+    container_name: gestar_phpmyadmin
+    restart: unless-stopped
     environment:
-      PMA_HOST: db
+      PMA_HOST: gestar_db
       PMA_USER: ${DB_USER}
       PMA_PASSWORD: ${DB_PASSWORD}
-      PMA_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
-      PMA_ARBITRARY: 1
-    ports:
-      - "8080:80"
+      PMA_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    networks:
+      - gestar_network
     depends_on:
       - db
-    networks:
-      - gestar_network
 
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.13.0
-    container_name: gestar_kibana_v2
-    ports:
-      - "5601:5601"
-    depends_on:
-      - elasticsearch
-    networks:
-      - gestar_network
-
+# Volumes nommés pour que Docker garde tes données sur le disque dur
 volumes:
   mysql_data:
-  esdata:
+  es_data:
 
 networks:
   gestar_network:

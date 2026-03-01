@@ -1,4 +1,5 @@
 from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import Column, String
 from typing import Optional, TYPE_CHECKING
 from datetime import datetime
 from decimal import Decimal
@@ -21,7 +22,10 @@ class LineItem(SQLModel, table=True):
     description: str = Field(max_length=255)
     long_description: Optional[str] = Field(default=None)
     
-    item_type: LineItemType = Field(default=LineItemType.SUPPLY)
+    item_type: LineItemType = Field(
+        default=LineItemType.SUPPLY,
+        sa_column=Column(String(50), nullable=False, default=LineItemType.SUPPLY.value),
+    )
     
     quantity: Decimal = Field(max_digits=10, decimal_places=2)
     unit: str = Field(default="u", max_length=50)  # u, m², m³, h, jour, forfait
@@ -40,6 +44,9 @@ class LineItem(SQLModel, table=True):
     model: Optional[str] = Field(default=None, max_length=100)
     
     notes: Optional[str] = Field(default=None)
+    
+    # Regroupement par section/lot (ex: "1. Gros œuvre")
+    section: Optional[str] = Field(default=None, max_length=255)
     
     display_order: int = Field(default=0)
 
@@ -87,6 +94,7 @@ class LineItemCreate(SQLModel):
     brand: Optional[str] = None
     model: Optional[str] = None
     notes: Optional[str] = None
+    section: Optional[str] = None
     display_order: int = 0
 
 
@@ -105,6 +113,7 @@ class LineItemRead(SQLModel):
     brand: Optional[str]
     model: Optional[str]
     notes: Optional[str]
+    section: Optional[str]
     display_order: int
     subtotal: Optional[Decimal] = None
     total_ht: Optional[Decimal] = None

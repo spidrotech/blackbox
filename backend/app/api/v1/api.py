@@ -11,6 +11,7 @@ from app.api.v1.endpoints import (
     equipment,
     price_library,
     dashboard,
+    settings,
 )
 
 api_router = APIRouter()
@@ -37,3 +38,4 @@ api_router.include_router(price_library.router, prefix="/price-library", tags=["
 
 # Dashboard & Analytics
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["Tableau de bord"])
+api_router.include_router(settings.router, prefix="/settings", tags=["Paramètres"]) 

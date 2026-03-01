@@ -22,3 +22,6 @@ export type { DataTableProps } from './DataTable';
 
 export { PageList } from './PageList';
 export type { PageListProps } from './PageList';
+export { Modal } from './Modal';
+export { AddressAutocomplete } from './AddressAutocomplete';
+export type { AddressResult } from './AddressAutocomplete';

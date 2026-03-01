@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
+import { AddressAutocomplete, AddressResult } from '@/components/ui/AddressAutocomplete';
 import { customerService } from '@/services/api';
 import { Customer, CustomerType } from '@/types';
 
@@ -228,26 +229,40 @@ export default function EditCustomerPage() {
                 </>
               )}
 
-              <Input
+              <AddressAutocomplete
                 label="Rue"
-                name="billing_street"
+                placeholder="Saisissez une adresse..."
                 value={formData.billing_street || ''}
-                onChange={handleChange}
+                onChange={(val) => setFormData((prev) => ({ ...prev, billing_street: val }))}
+                onSelect={(r: AddressResult) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    billing_street: r.street,
+                    billing_city: r.city,
+                    billing_postal_code: r.postalCode,
+                    billing_country: r.country,
+                  }))
+                }
               />
 
-              <Input
-                label="Ville"
-                name="billing_city"
-                value={formData.billing_city || ''}
-                onChange={handleChange}
-              />
-
-              <Input
-                label="Code postal"
-                name="billing_postal_code"
-                value={formData.billing_postal_code || ''}
-                onChange={handleChange}
-              />
+              <div className="grid grid-cols-5 gap-2">
+                <div className="col-span-2">
+                  <Input
+                    label="Code postal"
+                    name="billing_postal_code"
+                    value={formData.billing_postal_code || ''}
+                    onChange={handleChange}
+                  />
+                </div>
+                <div className="col-span-3">
+                  <Input
+                    label="Ville"
+                    name="billing_city"
+                    value={formData.billing_city || ''}
+                    onChange={handleChange}
+                  />
+                </div>
+              </div>
 
               <Input
                 label="Pays"

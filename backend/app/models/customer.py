@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 
 class Customer(SQLModel, table=True):
+    __tablename__ = "customers"
+
     id: Optional[int] = Field(default=None, primary_key=True)
     
     company_id: int = Field(foreign_key="companies.id", index=True)

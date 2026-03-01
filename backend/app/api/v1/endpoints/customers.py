@@ -119,43 +119,48 @@ def create_customer(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     
-    # Créer l'adresse si fournie
-    address_id = None
-    if customer_data.address:
-        addr = customer_data.address
-        address = Address(
-            street=addr.get("street", ""),
-            city=addr.get("city", ""),
-            postal_code=addr.get("postalCode", ""),
-            country=addr.get("country", "France"),
+    try:
+        # Créer l'adresse si fournie
+        address_id = None
+        if customer_data.address:
+            addr = customer_data.address
+            address = Address(
+                street=addr.get("street", ""),
+                city=addr.get("city", ""),
+                postal_code=addr.get("postalCode", ""),
+                country=addr.get("country", "France"),
+            )
+            session.add(address)
+            session.commit()
+            session.refresh(address)
+            address_id = address.id
+        
+        customer = Customer(
+            company_id=current_user.company_id,
+            type=customer_data.type,
+            name=name,
+            contact_name=customer_data.contact_name,
+            email=customer_data.email,
+            phone=customer_data.phone,
+            mobile=customer_data.mobile,
+            website=customer_data.website,
+            siret=customer_data.siret,
+            vat=customer_data.vat,
+            notes=customer_data.notes,
+            address_id=address_id,
         )
-        session.add(address)
+        session.add(customer)
         session.commit()
-        session.refresh(address)
-        address_id = address.id
-    
-    customer = Customer(
-        company_id=current_user.company_id,
-        type=customer_data.type,
-        name=name,
-        contact_name=customer_data.contact_name,
-        email=customer_data.email,
-        phone=customer_data.phone,
-        mobile=customer_data.mobile,
-        website=customer_data.website,
-        siret=customer_data.siret,
-        vat=customer_data.vat,
-        notes=customer_data.notes,
-        address_id=address_id,
-    )
-    session.add(customer)
-    session.commit()
-    session.refresh(customer)
-    
-    return {
-        "success": True,
-        "data": get_customer_response(customer, session)
-    }
+        session.refresh(customer)
+        
+        return {
+            "success": True,
+            "data": get_customer_response(customer, session)
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Erreur de création: {str(e)}")
 
 
 @router.put("/{customer_id}", response_model=dict)

@@ -1,12 +1,18 @@
 import logging
+import os
 import time
-from fastapi import FastAPI
+import traceback
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
-from fastapi.requests import Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-from logstash_async.handler import AsynchronousLogstashHandler
+try:
+    from logstash_async.handler import AsynchronousLogstashHandler
+    _LOGSTASH_AVAILABLE = True
+except ImportError:
+    _LOGSTASH_AVAILABLE = False
 from app.api.v1.api import api_router
 
 # Création de l'app FastAPI
@@ -14,23 +20,6 @@ app = FastAPI(
     title="GESTAR API",
     description="API Backend pour la gestion de projets énergétiques",
     version="1.0.0"
-)
-
-# Configuration CORS - DOIT être avant les autres middlewares
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3001",
-        "http://localhost:3000",
-        "http://127.0.0.1:3001",
-        "http://127.0.0.1:3000",
-        "http://frontend.local",
-    ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-    max_age=3600,
 )
 
 # Middleware pour logger TOUTES les requêtes HTTP
@@ -140,12 +129,46 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 f"Exception: {request.method} {request.url.path} - {str(e)}",
                 extra=extra_data
             )
-            raise
+            # Return a proper JSON response instead of re-raising so CORS headers are applied
+            from fastapi.responses import JSONResponse as _JSONResponse
+            return _JSONResponse(
+                status_code=500,
+                content={"detail": str(e), "type": type(e).__name__},
+            )
 
 app.add_middleware(LoggingMiddleware)
 
+# Configuration CORS - doit être ajouté EN DERNIER pour être la couche la plus externe
+# (dernier add_middleware = outermost dans Starlette)
+app.add_middleware(
+    CORSMiddleware,
+    # Regex covers http://localhost:*, http://127.0.0.1:*, http://*.localhost:*
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1|[a-z0-9\-]+\.localhost)(:\d+)?",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
+)
+
+# Safety-net: catch unhandled exceptions so CORS headers are always present
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {request.method} {request.url.path} - {exc}\n{traceback.format_exc()}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "type": type(exc).__name__},
+    )
+
 # Include API router
 app.include_router(api_router, prefix="/api/v1")
+
+# Serve static files (uploads, etc.)
+static_path = os.path.join(os.getcwd(), 'static') if hasattr(__import__('os'), 'getcwd') else 'static'
+try:
+    app.mount('/static', StaticFiles(directory=static_path), name='static')
+except Exception:
+    pass
 
 # Home page
 @app.get("/", response_class=HTMLResponse)
@@ -496,14 +519,17 @@ async def test_logs():
 logger = logging.getLogger('python-logstash-logger')
 logger.setLevel(logging.DEBUG)
 
-# On pointe vers le nom du service défini dans le docker-compose
-handler = AsynchronousLogstashHandler(
-    host='logstash', 
-    port=5000, 
-    database_path='logstash.db' # Fichier local temporaire si Logstash est injoignable
-)
-
-logger.addHandler(handler)
-
-# Test immédiat au démarrage
-logger.info("🚀 GESTAR API Started", extra={"application": "gestar_api", "event": "startup"})
+# Logstash est optionnel - activé uniquement si LOGSTASH_ENABLED=true
+_logstash_enabled = os.getenv('LOGSTASH_ENABLED', 'false').lower() == 'true'
+if _LOGSTASH_AVAILABLE and _logstash_enabled:
+    _logstash_host = os.getenv('LOGSTASH_HOST', 'logstash')
+    _logstash_port = int(os.getenv('LOGSTASH_PORT', '5000'))
+    handler = AsynchronousLogstashHandler(
+        host=_logstash_host,
+        port=_logstash_port,
+        database_path='logstash.db'
+    )
+    logger.addHandler(handler)
+    logger.info("🚀 GESTAR API Started", extra={"application": "gestar_api", "event": "startup"})
+else:
+    logging.getLogger(__name__).info("Logstash désactivé (LOGSTASH_ENABLED != true)")

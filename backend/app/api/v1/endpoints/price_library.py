@@ -79,17 +79,21 @@ def list_items(
 
 @router.get("/search", response_model=dict)
 def search_items(
-    q: str,
+    q: Optional[str] = None,
+    query: Optional[str] = None,
     limit: int = 20,
     current_user: User = Depends(get_current_user_required),
     session: Session = Depends(get_session)
 ):
-    """Recherche d'articles"""
+    """Recherche d'articles (accepte 'q' ou 'query' comme paramètre)"""
+    search_term = q or query or ""
+    if not search_term:
+        return {"success": True, "data": []}
     statement = select(PriceLibraryItem).where(
         PriceLibraryItem.company_id == current_user.company_id,
         PriceLibraryItem.is_active == True,
-        (PriceLibraryItem.name.ilike(f"%{q}%")) |
-        (PriceLibraryItem.description.ilike(f"%{q}%"))
+        (PriceLibraryItem.name.ilike(f"%{search_term}%")) |
+        (PriceLibraryItem.description.ilike(f"%{search_term}%"))
     ).limit(limit)
     items = session.exec(statement).all()
     

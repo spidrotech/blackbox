@@ -1,0 +1,65 @@
+http:
+  middlewares:
+    cors-headers:
+      headers:
+        accessControlAllowOriginList:
+          - "http://gestar.localhost:8000"
+          - "http://api.localhost:8000"
+          - "http://localhost:3000"
+          - "http://localhost:3001"
+          - "http://localhost:8000"
+          - "http://127.0.0.1:3000"
+          - "http://127.0.0.1:3001"
+        accessControlAllowMethods:
+          - "GET"
+          - "POST"
+          - "PUT"
+          - "PATCH"
+          - "DELETE"
+          - "OPTIONS"
+        accessControlAllowHeaders:
+          - "Content-Type"
+          - "Authorization"
+          - "Accept"
+          - "X-Requested-With"
+          - "Origin"
+        accessControlAllowCredentials: true
+        accessControlMaxAge: 3600
+        addVaryHeader: true
+
+  routers:
+    backend:
+      rule: "Host(`api.localhost`)"
+      service: backend
+      entryPoints:
+        - web
+      middlewares:
+        - cors-headers
+
+    frontend:
+      rule: "Host(`gestar.localhost`)"
+      service: frontend
+      entryPoints:
+        - web
+
+    phpmyadmin:
+      rule: "Host(`phpmyadmin.localhost`)"
+      service: phpmyadmin
+      entryPoints:
+        - web
+
+  services:
+    backend:
+      loadBalancer:
+        servers:
+          - url: "http://gestar_api:8001"
+
+    frontend:
+      loadBalancer:
+        servers:
+          - url: "http://gestar_web:3001"
+
+    phpmyadmin:
+      loadBalancer:
+        servers:
+          - url: "http://gestar_phpmyadmin:80"

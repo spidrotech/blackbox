@@ -1,33 +1,63 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MainLayout } from '@/components/layout';
-import { Card, CardContent, CardHeader, CardTitle, Badge, Button } from '@/components/ui';
 import { dashboardService } from '@/services/api';
-import { DashboardData } from '@/types';
-import { formatCurrency, formatDate } from '@/lib/utils';
+
+const fmt = (n: number) =>
+  new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+
+const fmtDate = (s?: string) => {
+  if (!s) return '';
+  return new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+};
+
+const QUOTE_BADGE: Record<string, { label: string; cls: string }> = {
+  draft:     { label: 'Brouillon', cls: 'bg-gray-100 text-gray-600' },
+  sent:      { label: 'Envoyé',    cls: 'bg-blue-100 text-blue-700' },
+  viewed:    { label: 'Consulté',  cls: 'bg-purple-100 text-purple-700' },
+  signed:    { label: 'Signé',     cls: 'bg-green-100 text-green-700' },
+  accepted:  { label: 'Accepté',   cls: 'bg-green-100 text-green-700' },
+  refused:   { label: 'Refusé',    cls: 'bg-red-100 text-red-700' },
+  finalized: { label: 'Finalisé',  cls: 'bg-orange-100 text-orange-700' },
+};
+
+const INV_BADGE: Record<string, { label: string; cls: string }> = {
+  draft:    { label: 'Brouillon', cls: 'bg-gray-100 text-gray-600' },
+  sent:     { label: 'Envoyée',   cls: 'bg-blue-100 text-blue-700' },
+  partial:  { label: 'Partielle', cls: 'bg-yellow-100 text-yellow-700' },
+  paid:     { label: 'Payée',     cls: 'bg-green-100 text-green-700' },
+  overdue:  { label: 'En retard', cls: 'bg-red-100 text-red-700' },
+  cancelled:{ label: 'Annulée',   cls: 'bg-gray-100 text-gray-500' },
+};
+
+interface DashData {
+  ca_mois: number;
+  ca_total: number;
+  reste_a_encaisser: number;
+  overdue_count: number;
+  projects: { total: number; active: number };
+  customers: { total: number };
+  quotes: { total: number; pending: number; pendingValue: number };
+  invoices: { total: number; unpaid: number; unpaidValue: number };
+  recentProjects: { id: number; name: string; status: string; customer_name: string; budget: number; worksite_address?: string; type?: string }[];
+  recentQuotes: { id: number; reference: string; status: string; customer_name: string; amount: number; date?: string }[];
+  recentInvoices: { id: number; reference: string; status: string; customer_name: string; amount: number; amount_paid: number; date?: string; due_date?: string }[];
+}
 
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
+  const [data, setData] = useState<DashData | null>(null);
+  const [tab, setTab] = useState<'quotes' | 'invoices'>('quotes');
   const [loading, setLoading] = useState(true);
+  const now = new Date();
+  const monthLabel = now.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
 
   useEffect(() => {
-    loadDashboard();
+    dashboardService.getData().then(res => {
+      if (res.success && res.data) setData(res.data);
+    }).finally(() => setLoading(false));
   }, []);
-
-  const loadDashboard = async () => {
-    try {
-      const response = await dashboardService.getData();
-      if (response.success && response.data) {
-        setData(response.data);
-      }
-    } catch (error) {
-      console.error('Error loading dashboard:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -39,199 +69,138 @@ export default function DashboardPage() {
     );
   }
 
+  const d = data ?? {
+    ca_mois: 0, ca_total: 0, reste_a_encaisser: 0, overdue_count: 0,
+    projects: { total: 0, active: 0 }, customers: { total: 0 },
+    quotes: { total: 0, pending: 0, pendingValue: 0 },
+    invoices: { total: 0, unpaid: 0, unpaidValue: 0 },
+    recentProjects: [], recentQuotes: [], recentInvoices: [],
+  };
+
   return (
     <MainLayout>
       <div className="space-y-6">
-        {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Tableau de bord</h1>
-          <p className="text-gray-500">Vue d&apos;ensemble de votre activité</p>
+          <h1 className="text-2xl font-bold text-gray-900 capitalize">{monthLabel}</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{d.projects.active} chantier(s) actif(s)  {d.customers.total} client(s)</p>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0 p-3 bg-blue-100 rounded-lg">
-                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                  </svg>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Projets actifs</p>
-                  <p className="text-2xl font-bold text-gray-900">{data?.projects.active || 0}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0 p-3 bg-green-100 rounded-lg">
-                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                  </svg>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Clients</p>
-                  <p className="text-2xl font-bold text-gray-900">{data?.customers.total || 0}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0 p-3 bg-yellow-100 rounded-lg">
-                  <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Devis en attente</p>
-                  <p className="text-2xl font-bold text-gray-900">{data?.quotes.pending || 0}</p>
-                  <p className="text-sm text-gray-500">{formatCurrency(data?.quotes.pendingValue || 0)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0 p-3 bg-red-100 rounded-lg">
-                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z" />
-                  </svg>
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-500">Factures impayées</p>
-                  <p className="text-2xl font-bold text-gray-900">{data?.invoices.unpaid || 0}</p>
-                  <p className="text-sm text-gray-500">{formatCurrency(data?.invoices.unpaidValue || 0)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">CA encaissé ce mois</p>
+            <p className="text-3xl font-bold text-gray-900 mt-2">{fmt(d.ca_mois)}</p>
+            <p className="text-xs text-gray-400 mt-1">Total all time : {fmt(d.ca_total)}</p>
+            <div className="mt-3 h-1 rounded-full bg-blue-50"><div className="h-1 rounded-full bg-blue-500" style={{ width: '60%' }} /></div>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Devis en attente</p>
+            <p className="text-3xl font-bold text-gray-900 mt-2">{fmt(d.quotes.pendingValue)}</p>
+            <p className="text-xs text-gray-400 mt-1">{d.quotes.pending} devis  {d.quotes.total} au total</p>
+            <div className="mt-3 h-1 rounded-full bg-orange-50"><div className="h-1 rounded-full bg-orange-400" style={{ width: '40%' }} /></div>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Reste à encaisser</p>
+            <p className="text-3xl font-bold text-gray-900 mt-2">{fmt(d.reste_a_encaisser)}</p>
+            {d.overdue_count > 0 ? (
+              <p className="text-xs text-red-500 mt-1 font-medium">{d.overdue_count} facture(s) en retard</p>
+            ) : (
+              <p className="text-xs text-gray-400 mt-1">{d.invoices.unpaid} facture(s) impayée(s)</p>
+            )}
+            <div className="mt-3 h-1 rounded-full bg-red-50"><div className="h-1 rounded-full bg-red-400" style={{ width: '30%' }} /></div>
+          </div>
         </div>
 
-        {/* Revenue */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">Chiffre d&apos;affaires encaissé</p>
-                <p className="text-3xl font-bold text-green-600">{formatCurrency(data?.revenue.total || 0)}</p>
-              </div>
-              <Link href="/invoices">
-                <Button variant="outline">Voir les factures</Button>
-              </Link>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-50">
+              <h2 className="font-semibold text-gray-800">Chantiers</h2>
+              <Link href="/projects" className="text-xs text-blue-600 hover:underline">Voir tout</Link>
             </div>
-          </CardContent>
-        </Card>
+            {d.recentProjects.length === 0 ? (
+              <p className="px-5 py-8 text-sm text-gray-400 text-center">Aucun chantier</p>
+            ) : (
+              <ul className="divide-y divide-gray-50">
+                {d.recentProjects.slice(0, 8).map(p => (
+                  <li key={`${p.type ?? 'project'}-${p.id}`} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                    <div className="min-w-0">
+                      {p.type === 'quote_worksite' ? (
+                        <Link href={`/quotes/${p.id}`} className="text-sm font-medium text-gray-800 hover:text-blue-600 truncate block">{p.name}</Link>
+                      ) : (
+                        <Link href={`/projects/${p.id}`} className="text-sm font-medium text-gray-800 hover:text-blue-600 truncate block">{p.name}</Link>
+                      )}
+                      <span className="text-xs text-gray-400">
+                        {p.customer_name || ''}
+                        {p.worksite_address && <span className="ml-1 text-purple-500">📍 {p.worksite_address.slice(0, 30)}{p.worksite_address.length > 30 ? '…' : ''}</span>}
+                      </span>
+                    </div>
+                    <div className="text-right shrink-0 ml-4">
+                      {p.type === 'quote_worksite'
+                        ? <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">Devis</span>
+                        : p.budget ? <span className="text-sm font-medium text-gray-700">{fmt(p.budget)}</span> : null
+                      }
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
-        {/* Recent items */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Recent Projects */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Projets récents</CardTitle>
-                <Link href="/projects" className="text-sm text-blue-600 hover:text-blue-800">
-                  Voir tout
-                </Link>
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-50">
+              <div className="flex gap-0.5 bg-gray-100 rounded-lg p-0.5">
+                <button onClick={() => setTab('quotes')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${tab === 'quotes' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Devis</button>
+                <button onClick={() => setTab('invoices')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${tab === 'invoices' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Factures</button>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {data?.recentProjects?.length ? (
-                  data.recentProjects.map((project) => (
-                    <Link
-                      key={project.id}
-                      href={`/projects/${project.id}`}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      <div>
-                        <p className="font-medium text-gray-900">{project.name}</p>
-                        <p className="text-sm text-gray-500">{formatDate(project.createdAt)}</p>
-                      </div>
-                      <Badge status={project.status} />
-                    </Link>
-                  ))
-                ) : (
-                  <p className="text-gray-500 text-center py-4">Aucun projet</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+              <Link href={tab === 'quotes' ? '/quotes' : '/invoices'} className="text-xs text-blue-600 hover:underline">Voir tout</Link>
+            </div>
 
-          {/* Recent Quotes */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Devis récents</CardTitle>
-                <Link href="/quotes" className="text-sm text-blue-600 hover:text-blue-800">
-                  Voir tout
-                </Link>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {data?.recentQuotes?.length ? (
-                  data.recentQuotes.map((quote) => (
-                    <Link
-                      key={quote.id}
-                      href={`/quotes/${quote.id}`}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      <div>
-                        <p className="font-medium text-gray-900">{quote.reference}</p>
-                        <p className="text-sm text-gray-500">{formatDate(quote.createdAt)}</p>
-                      </div>
-                      <Badge status={quote.status} />
-                    </Link>
-                  ))
-                ) : (
-                  <p className="text-gray-500 text-center py-4">Aucun devis</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+            {tab === 'quotes' && (
+              d.recentQuotes.length === 0 ? <p className="px-5 py-8 text-sm text-gray-400 text-center">Aucun devis</p> : (
+                <ul className="divide-y divide-gray-50">
+                  {d.recentQuotes.slice(0, 8).map(q => {
+                    const b = QUOTE_BADGE[q.status] ?? { label: q.status, cls: 'bg-gray-100 text-gray-600' };
+                    return (
+                      <li key={q.id} className="px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
+                        <span className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${b.cls}`}>{b.label}</span>
+                        <div className="min-w-0 flex-1">
+                          <Link href={`/quotes/${q.id}`} className="text-sm font-medium text-gray-800 hover:text-blue-600 block truncate">{q.reference}</Link>
+                          <span className="text-xs text-gray-400">{q.customer_name || ''}</span>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-medium text-gray-800">{fmt(q.amount)}</p>
+                          <p className="text-xs text-gray-400">{fmtDate(q.date)}</p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )
+            )}
 
-          {/* Recent Invoices */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Factures récentes</CardTitle>
-                <Link href="/invoices" className="text-sm text-blue-600 hover:text-blue-800">
-                  Voir tout
-                </Link>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {data?.recentInvoices?.length ? (
-                  data.recentInvoices.map((invoice) => (
-                    <Link
-                      key={invoice.id}
-                      href={`/invoices/${invoice.id}`}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      <div>
-                        <p className="font-medium text-gray-900">{invoice.reference}</p>
-                        <p className="text-sm text-gray-500">{formatDate(invoice.createdAt)}</p>
-                      </div>
-                      <Badge status={invoice.status} />
-                    </Link>
-                  ))
-                ) : (
-                  <p className="text-gray-500 text-center py-4">Aucune facture</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+            {tab === 'invoices' && (
+              d.recentInvoices.length === 0 ? <p className="px-5 py-8 text-sm text-gray-400 text-center">Aucune facture</p> : (
+                <ul className="divide-y divide-gray-50">
+                  {d.recentInvoices.slice(0, 8).map(i => {
+                    const b = INV_BADGE[i.status] ?? { label: i.status, cls: 'bg-gray-100 text-gray-600' };
+                    const reste = i.amount - i.amount_paid;
+                    return (
+                      <li key={i.id} className="px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
+                        <span className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${b.cls}`}>{b.label}</span>
+                        <div className="min-w-0 flex-1">
+                          <Link href={`/invoices/${i.id}`} className="text-sm font-medium text-gray-800 hover:text-blue-600 block truncate">{i.reference}</Link>
+                          <span className="text-xs text-gray-400">{i.customer_name || ''}</span>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-medium text-gray-800">{fmt(i.amount)}</p>
+                          {reste > 0 ? <p className="text-xs text-red-400">Reste {fmt(reste)}</p> : <p className="text-xs text-green-500">Soldée</p>}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )
+            )}
+          </div>
         </div>
       </div>
     </MainLayout>

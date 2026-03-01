@@ -12,3 +12,5 @@ passlib>=1.7.4
 python-dotenv
 python-logstash-async
 python-jose[cryptography]
+reportlab
+requests
