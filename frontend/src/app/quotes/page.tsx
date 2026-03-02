@@ -8,6 +8,7 @@ import { Input } from '@/components/ui';
 import { quoteService, customerService } from '@/services/api';
 import { Quote, Customer, QuoteStats } from '@/types';
 import { formatDate, formatCurrency } from '@/lib/utils';
+import { buildDetailPath, buildEditPath } from '@/lib/routes';
 
 const BADGE: Record<string, { label: string; cls: string }> = {
   draft:     { label: 'Brouillon', cls: 'bg-gray-100 text-gray-600' },
@@ -74,7 +75,8 @@ export default function QuotesPage() {
         quoteService.getStats(),
       ]);
       if (quotesRes.success) {
-        const data = (quotesRes as any).data || (quotesRes as any).items || (quotesRes as any).quotes || quotesRes.data;
+        const resShape = quotesRes as unknown as { data?: unknown; items?: unknown; quotes?: unknown };
+        const data = resShape.data ?? resShape.items ?? resShape.quotes ?? quotesRes.data;
         setQuotes(Array.isArray(data) ? data : []);
       }
       if (customersRes.success) {
@@ -94,21 +96,20 @@ export default function QuotesPage() {
 
   const getCustomerName = (quote: Quote): string => {
     if (quote.customer) {
-      const c = quote.customer as any;
-      return c.name || '-';
+      return quote.customer.name || `${quote.customer.firstName || ''} ${quote.customer.lastName || ''}`.trim() || '-';
     }
-    const cid = (quote as any).customer_id;
+    const cid = quote.customer_id ?? quote.customerId;
     if (!cid) return '-';
-    const c = customers.find(x => x.id === cid) as any;
+    const c = customers.find(x => x.id === cid);
     if (!c) return '-';
     return c.name || `${c.firstName || ''} ${c.lastName || ''}`.trim() || '-';
   };
 
   const getTotal = (quote: Quote): number =>
-    (quote as any).total_ttc ?? (quote as any).total ?? 0;
+    quote.total_ttc ?? quote.total ?? 0;
 
   const getDaysUntilExpiry = (quote: Quote): number | null => {
-    const d = (quote as any).expiry_date;
+    const d = quote.expiry_date ?? quote.expiryDate;
     if (!d) return null;
     return Math.ceil((new Date(d).getTime() - Date.now()) / 86400000);
   };
@@ -116,7 +117,7 @@ export default function QuotesPage() {
   const filteredQuotes = quotes.filter(q => {
     const matchSearch = search === '' ||
       q.reference.toLowerCase().includes(search.toLowerCase()) ||
-      ((q as any).subject || q.description || '').toLowerCase().includes(search.toLowerCase()) ||
+      (q.subject || q.description || '').toLowerCase().includes(search.toLowerCase()) ||
       getCustomerName(q).toLowerCase().includes(search.toLowerCase());
     const matchTab = tab === '' || q.status === tab;
     return matchSearch && matchTab;
@@ -128,9 +129,10 @@ export default function QuotesPage() {
     setActionLoading(id);
     try {
       const res = await quoteService.duplicate(id);
-      if (res.success && (res as any).quote) {
+      const duplicatedQuote = (res as unknown as { quote?: Quote }).quote ?? (res.data as Quote | undefined);
+      if (res.success && duplicatedQuote?.id) {
         showToast('Devis dupliqué avec succès');
-        router.push(`/quotes/${(res as any).quote.id}/edit`);
+        router.push(buildEditPath('quotes', duplicatedQuote.id));
       }
     } catch { showToast('Erreur lors de la duplication', 'error'); }
     finally { setActionLoading(null); }
@@ -159,8 +161,13 @@ export default function QuotesPage() {
       const res = await quoteService.convertToInvoice(id);
       if (res.success) {
         showToast('Facture créée avec succès');
-        const inv = (res as any).invoice || res.data;
-        if (inv?.id) router.push(`/invoices/${inv.id}`); else loadData();
+        const inv = (res as unknown as { invoice?: { id?: number } }).invoice ?? (res.data as { id?: number } | undefined);
+        const createdInvoiceId = inv?.id;
+        if (typeof createdInvoiceId === 'number') {
+          router.push(buildDetailPath('invoices', createdInvoiceId));
+        } else {
+          loadData();
+        }
       }
     } catch { showToast('Erreur conversion', 'error'); }
     finally { setActionLoading(null); }
@@ -318,10 +325,10 @@ export default function QuotesPage() {
                     return (
                       <tr key={quote.id} className="hover:bg-gray-50/70 transition-colors group">
                         <td className="px-5 py-3.5">
-                          <Link href={`/quotes/${quote.id}`} className="block">
+                          <Link href={buildDetailPath('quotes', quote.id)} className="block">
                             <div className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">{quote.reference}</div>
-                            {((quote as any).subject || quote.description) && (
-                              <div className="text-xs text-gray-400 truncate max-w-[180px] mt-0.5">{(quote as any).subject || quote.description}</div>
+                            {(quote.subject || quote.description) && (
+                              <div className="text-xs text-gray-400 truncate max-w-[180px] mt-0.5">{quote.subject || quote.description}</div>
                             )}
                           </Link>
                         </td>
@@ -330,13 +337,13 @@ export default function QuotesPage() {
                           <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${b.cls}`}>{b.label}</span>
                         </td>
                         <td className="px-5 py-3.5 text-sm text-gray-500 whitespace-nowrap">
-                          {(quote as any).quote_date ? formatDate((quote as any).quote_date) : '—'}
+                          {(quote.quote_date ?? quote.quoteDate) ? formatDate(quote.quote_date ?? quote.quoteDate ?? '') : '—'}
                         </td>
                         <td className="px-5 py-3.5 text-sm whitespace-nowrap">
-                          {(quote as any).expiry_date ? (
+                          {(quote.expiry_date ?? quote.expiryDate) ? (
                             <span className={`font-medium ${isExpired ? 'text-red-600' : isExpiringSoon ? 'text-orange-600' : 'text-gray-500'}`}>
                               {isExpired && '⚠ '}{isExpiringSoon && '⏱ '}
-                              {formatDate((quote as any).expiry_date)}
+                              {formatDate(quote.expiry_date ?? quote.expiryDate ?? '')}
                               {daysLeft !== null && !isExpired && <span className="ml-1 text-xs opacity-70">({daysLeft}j)</span>}
                             </span>
                           ) : '—'}
@@ -346,10 +353,10 @@ export default function QuotesPage() {
                         </td>
                         <td className="px-5 py-3.5 text-right">
                           <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Link href={`/quotes/${quote.id}`} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-blue-600 transition-colors" title="Voir">
+                            <Link href={buildDetailPath('quotes', quote.id)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-blue-600 transition-colors" title="Voir">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                             </Link>
-                            <Link href={`/quotes/${quote.id}/edit`} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors" title="Modifier">
+                            <Link href={buildEditPath('quotes', quote.id)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors" title="Modifier">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                             </Link>
                             <button onClick={() => handleDownloadPdf(quote.id)} disabled={isActLoading} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 hover:text-red-600 transition-colors" title="Télécharger PDF">

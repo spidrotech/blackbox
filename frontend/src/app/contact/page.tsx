@@ -93,7 +93,7 @@ export default function Contact() {
             Nous sommes là pour vous aider
           </h1>
           <p className="text-xl text-gray-600 mb-8">
-            Vous avez des questions ? N'hésitez pas à nous contacter. 
+            Vous avez des questions ? N&apos;hésitez pas à nous contacter. 
             Notre équipe répondra à vos demandes dans les 24 heures.
           </p>
         </div>
@@ -233,7 +233,7 @@ export default function Contact() {
                 Se connecter
               </Link>
               <Link href="/register" className="text-gray-400 hover:text-white transition-colors">
-                S'inscrire
+                S&apos;inscrire
               </Link>
               <Link href="/contact" className="text-gray-400 hover:text-white transition-colors">
                 Contact

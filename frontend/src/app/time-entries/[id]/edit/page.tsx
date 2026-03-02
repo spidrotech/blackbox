@@ -5,7 +5,8 @@ import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
 import { timeEntryService, projectService } from '@/services/api';
-import { TimeEntry, TimeEntryCreate, Project } from '@/types';
+import { TimeEntryCreate, Project } from '@/types';
+import { buildDetailPath } from '@/lib/routes';
 
 export default function EditTimeEntryPage() {
   const router = useRouter();
@@ -28,6 +29,7 @@ export default function EditTimeEntryPage() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeEntryId]);
 
   const loadData = async () => {
@@ -99,7 +101,7 @@ export default function EditTimeEntryPage() {
     try {
       const response = await timeEntryService.update(timeEntryId, formData);
       if (response.success) {
-        router.push(`/time-entries/${timeEntryId}`);
+        router.push(buildDetailPath('time-entries', timeEntryId));
       }
     } catch (error) {
       console.error('Error updating time entry:', error);
@@ -220,7 +222,7 @@ export default function EditTimeEntryPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => router.push(`/time-entries/${timeEntryId}`)}
+              onClick={() => router.push(buildDetailPath('time-entries', timeEntryId))}
             >
               Annuler
             </Button>

@@ -3,10 +3,10 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MainLayout } from '@/components/layout';
-import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Input, Select } from '@/components/ui';
+import { Button, Input, Select } from '@/components/ui';
 import { customerService } from '@/services/api';
 import { Customer } from '@/types';
-import { getStatusLabel, formatDate } from '@/lib/utils';
+import { buildDetailPath, buildEditPath } from '@/lib/routes';
 
 const typeOptions = [
   { value: '', label: 'Tous les types' },
@@ -47,10 +47,10 @@ export default function CustomersPage() {
   };
 
   const getCustomerName = (customer: Customer) => {
-    if (customer.type === 'COMPANY') {
+    if (customer.type === 'company') {
       return customer.name;
     }
-    return `${customer.firstName || customer.first_name || ''} ${customer.lastName || customer.last_name || ''}`.trim();
+    return `${customer.firstName || ''} ${customer.lastName || ''}`.trim();
   };
 
   const getTimeSinceUpdate = (date: string | undefined) => {
@@ -69,7 +69,7 @@ export default function CustomersPage() {
   };
 
   const getTypeLabel = (type: string) => {
-    return type === 'INDIVIDUAL' ? 'Particulier' : 'Entreprise';
+    return type === 'individual' ? 'Particulier' : 'Entreprise';
   };
 
   const filteredAndSortedCustomers = customers
@@ -233,7 +233,7 @@ export default function CustomersPage() {
                       </td>
                       <td className="px-6 py-4">
                         <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                          customer.type === 'INDIVIDUAL' 
+                          customer.type === 'individual' 
                             ? 'bg-blue-100 text-blue-800'
                             : 'bg-purple-100 text-purple-800'
                         }`}>
@@ -276,7 +276,7 @@ export default function CustomersPage() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-1">
-                          <Link href={`/customers/${customer.id}`}>
+                          <Link href={buildDetailPath('customers', customer.id)}>
                             <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded">
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -284,7 +284,7 @@ export default function CustomersPage() {
                               </svg>
                             </button>
                           </Link>
-                          <Link href={`/customers/${customer.id}/edit`}>
+                          <Link href={buildEditPath('customers', customer.id)}>
                             <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded">
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -321,7 +321,7 @@ export default function CustomersPage() {
                   <span>
                     <select 
                       value={itemsPerPage} 
-                      onChange={(e) => {}}
+                      onChange={() => {}}
                       className="text-gray-600 font-medium border-0 bg-transparent"
                     >
                       <option value={25}>25 par page</option>

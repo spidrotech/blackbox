@@ -6,7 +6,7 @@ import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '@/components/ui';
 import { projectService } from '@/services/api';
 import { Project } from '@/types';
-import { getStatusColor, getStatusLabel } from '@/lib/utils';
+import { buildDetailPath, buildEditPath } from '@/lib/routes';
 
 export default function ProjectDetailPage() {
   const router = useRouter();
@@ -19,6 +19,7 @@ export default function ProjectDetailPage() {
 
   useEffect(() => {
     loadProject();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   const loadProject = async () => {
@@ -87,7 +88,7 @@ export default function ProjectDetailPage() {
           </div>
           <div className="flex gap-2">
             <Button
-              onClick={() => router.push(`/projects/${projectId}/edit`)}
+              onClick={() => router.push(buildEditPath('projects', projectId))}
               variant="primary"
             >
               Modifier
@@ -112,10 +113,10 @@ export default function ProjectDetailPage() {
                 <label className="text-sm text-gray-500">Client</label>
                 <p className="font-medium">
                   <a
-                    href={`/customers/${project.customer_id}`}
+                    href={buildDetailPath('customers', project.customer_id)}
                     className="text-blue-600 hover:underline"
                   >
-                    {project.customer.company_name || `${project.customer.first_name} ${project.customer.last_name}`}
+                    {project.customer.name || `${project.customer.firstName || ''} ${project.customer.lastName || ''}`.trim()}
                   </a>
                 </p>
               </div>

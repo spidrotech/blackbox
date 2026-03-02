@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
-import { equipmentService, projectService } from '@/services/api';
-import { Equipment, EquipmentCreate, Project } from '@/types';
+import { equipmentService } from '@/services/api';
+import { EquipmentCreate } from '@/types';
+import { buildDetailPath } from '@/lib/routes';
 
 const statusOptions = [
   { value: 'available', label: 'Disponible' },
@@ -31,7 +32,6 @@ export default function EditEquipmentPage() {
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [projects, setProjects] = useState<Project[]>([]);
   
   const [formData, setFormData] = useState<EquipmentCreate>({
     name: '',
@@ -45,14 +45,12 @@ export default function EditEquipmentPage() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [equipmentId]);
 
   const loadData = async () => {
     try {
-      const [equipmentRes, projectsRes] = await Promise.all([
-        equipmentService.getById(equipmentId),
-        projectService.getAll(),
-      ]);
+      const equipmentRes = await equipmentService.getById(equipmentId);
       
       if (equipmentRes.success && equipmentRes.data) {
         const equipment = equipmentRes.data;
@@ -67,22 +65,12 @@ export default function EditEquipmentPage() {
         });
       }
       
-      if (projectsRes.success) {
-        const projectsData = Array.isArray(projectsRes.data) ? projectsRes.data : [];
-        const flatProjects = Array.isArray(projectsData) ? (projectsData as Project[]) : [];
-        setProjects(flatProjects);
-      }
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
       setLoading(false);
     }
   };
-
-  const projectOptions = [
-    { value: '', label: 'Aucun (disponible)' },
-    ...projects.map(p => ({ value: String(p.id), label: p.name })),
-  ];
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -101,7 +89,7 @@ export default function EditEquipmentPage() {
     try {
       const response = await equipmentService.update(equipmentId, formData);
       if (response.success) {
-        router.push(`/equipment/${equipmentId}`);
+        router.push(buildDetailPath('equipment', equipmentId));
       }
     } catch (error) {
       console.error('Error updating equipment:', error);
@@ -225,7 +213,7 @@ export default function EditEquipmentPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => router.push(`/equipment/${equipmentId}`)}
+              onClick={() => router.push(buildDetailPath('equipment', equipmentId))}
             >
               Annuler
             </Button>

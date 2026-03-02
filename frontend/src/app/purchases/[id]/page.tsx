@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
-import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '@/components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Button } from '@/components/ui';
 import { purchaseService } from '@/services/api';
 import { Purchase } from '@/types';
+import { buildDetailPath, buildEditPath } from '@/lib/routes';
 
 const categoryLabels: Record<string, string> = {
   materials: 'Matériaux',
@@ -27,6 +28,7 @@ export default function PurchaseDetailPage() {
 
   useEffect(() => {
     loadPurchase();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [purchaseId]);
 
   const loadPurchase = async () => {
@@ -96,7 +98,7 @@ export default function PurchaseDetailPage() {
           </div>
           <div className="flex gap-2">
             <Button
-              onClick={() => router.push(`/purchases/${purchaseId}/edit`)}
+              onClick={() => router.push(buildEditPath('purchases', purchaseId))}
               variant="primary"
             >
               Modifier
@@ -114,7 +116,7 @@ export default function PurchaseDetailPage() {
         <div className="grid grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Détails de l'achat</CardTitle>
+              <CardTitle>Détails de l&apos;achat</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {purchase.supplier && (
@@ -122,7 +124,7 @@ export default function PurchaseDetailPage() {
                   <label className="text-sm text-gray-500">Fournisseur</label>
                   <p className="font-medium">
                     <a
-                      href={`/suppliers/${purchase.supplier_id}`}
+                      href={buildDetailPath('suppliers', purchase.supplier_id ?? '')}
                       className="text-blue-600 hover:underline"
                     >
                       {purchase.supplier.name}
@@ -136,7 +138,7 @@ export default function PurchaseDetailPage() {
                   <label className="text-sm text-gray-500">Projet</label>
                   <p className="font-medium">
                     <a
-                      href={`/projects/${purchase.project_id}`}
+                      href={buildDetailPath('projects', purchase.project_id ?? '')}
                       className="text-blue-600 hover:underline"
                     >
                       {purchase.project.name}
@@ -164,7 +166,7 @@ export default function PurchaseDetailPage() {
               <CardTitle>Date</CardTitle>
             </CardHeader>
             <CardContent>
-              <label className="text-sm text-gray-500">Date d'achat</label>
+              <label className="text-sm text-gray-500">Date d&apos;achat</label>
               <p className="font-medium">
                 {purchase.purchase_date ? new Date(purchase.purchase_date).toLocaleDateString('fr-FR') : 'N/A'}
               </p>

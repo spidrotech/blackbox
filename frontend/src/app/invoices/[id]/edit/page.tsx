@@ -5,13 +5,52 @@ import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
 import { invoiceService, customerService, projectService } from '@/services/api';
-import { Customer, Project } from '@/types';
+import { Customer, InvoiceCreate, LineItem, LineItemType, Project } from '@/types';
 import { LineItemsEditor, LineItemData } from '@/components/quotes/LineItemsEditor';
 import InvoicePreview, { InvoicePreviewData, InvoiceCustomer, InvoiceCompany } from '@/components/invoices/InvoicePreview';
+import { buildDetailPath } from '@/lib/routes';
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 
-const toLineItemData = (item: any): LineItemData => ({
+type ApiListResponse<T> = { data?: T[]; items?: T[] };
+
+type LineItemLike = Partial<LineItemData> & {
+  designation?: string;
+  description?: string;
+  tax_rate?: number;
+};
+
+type InvoiceLike = {
+  reference?: string;
+  company?: InvoiceCompany | null;
+  customer_id?: number;
+  customerId?: number;
+  project_id?: number;
+  projectId?: number;
+  description?: string;
+  invoiceDate?: string;
+  invoice_date?: string;
+  dueDate?: string;
+  due_date?: string;
+  notes?: string;
+  paymentTerms?: string;
+  payment_terms?: string;
+  bankDetails?: string;
+  bank_details?: string;
+  purchaseOrder?: string;
+  purchase_order?: string;
+  conditions?: string;
+  lineItems?: LineItemLike[];
+  line_items?: LineItemLike[];
+};
+
+const getListData = <T,>(response: ApiListResponse<T>): T[] => {
+  if (Array.isArray(response.data)) return response.data;
+  if (Array.isArray(response.items)) return response.items;
+  return [];
+};
+
+const toLineItemData = (item: LineItemLike): LineItemData => ({
   id: item.id,
   description: item.designation ?? item.description ?? '',
   long_description: item.long_description,
@@ -24,11 +63,18 @@ const toLineItemData = (item: any): LineItemData => ({
   reference: item.reference,
 });
 
-const toPayload = (item: LineItemData) => ({
+const toLineItemType = (itemType: LineItemData['item_type']): LineItemType => {
+  if (itemType === 'supply' || itemType === 'labor' || itemType === 'other') {
+    return itemType;
+  }
+  return 'other';
+};
+
+const toPayload = (item: LineItemData): LineItem => ({
   designation: item.description,
   description: item.description,
   long_description: item.long_description,
-  item_type: item.item_type,
+  item_type: toLineItemType(item.item_type),
   quantity: item.quantity,
   unit: item.unit,
   unit_price: item.unit_price,
@@ -38,7 +84,7 @@ const toPayload = (item: LineItemData) => ({
 });
 
 const customerDisplayName = (c: Customer) =>
-  c.name ?? (`${(c as any).first_name ?? ''} ${(c as any).last_name ?? ''}`.trim() || `Client #${c.id}`);
+  c.name ?? (`${c.firstName ?? ''} ${c.lastName ?? ''}`.trim() || `Client #${c.id}`);
 
 /* ─── Main Page ─────────────────────────────────────────────────────────── */
 
@@ -83,7 +129,7 @@ export default function EditInvoicePage() {
       ]);
 
       if (invoiceRes.success && invoiceRes.data) {
-        const inv = invoiceRes.data as any;
+        const inv = invoiceRes.data as InvoiceLike;
         setInvoiceRef(inv.reference);
         setInvoiceCompany(inv.company ?? null);
 
@@ -106,11 +152,11 @@ export default function EditInvoicePage() {
       }
 
       if (customersRes.success) {
-        const list = Array.isArray(customersRes.data) ? customersRes.data : (customersRes as any).items ?? [];
+        const list = getListData<Customer>(customersRes as ApiListResponse<Customer>);
         setCustomers(list.flat());
       }
       if (projectsRes.success) {
-        const list = Array.isArray(projectsRes.data) ? projectsRes.data : (projectsRes as any).items ?? [];
+        const list = getListData<Project>(projectsRes as ApiListResponse<Project>);
         setProjects(list.flat());
       }
     } catch (err) {
@@ -164,27 +210,32 @@ export default function EditInvoicePage() {
 
     setSaving(true);
     try {
-      const res = await invoiceService.update(invoiceId, {
+      const payload: InvoiceCreate = {
         customer_id: formData.customer_id,
         project_id: formData.project_id || undefined,
         description: formData.description || undefined,
-        invoice_date: formData.invoice_date as any,
-        due_date: formData.due_date as any,
+        invoice_date: formData.invoice_date,
+        due_date: formData.due_date,
         notes: formData.notes || undefined,
         payment_terms: formData.payment_terms || undefined,
         bank_details: formData.bank_details || undefined,
-        purchase_order: (formData as any).purchase_order || undefined,
-        conditions: (formData as any).conditions || undefined,
+        purchase_order: formData.purchase_order || undefined,
+        conditions: formData.conditions || undefined,
         line_items: lineItems.map(toPayload),
-      } as any);
+      };
+      const res = await invoiceService.update(invoiceId, payload);
 
       if (res.success) {
-        router.push(`/invoices/${invoiceId}`);
+        router.push(buildDetailPath('invoices', invoiceId));
       } else {
         setError('Erreur lors de la sauvegarde.');
       }
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Erreur lors de la sauvegarde.');
+    } catch (err: unknown) {
+      const detail =
+        typeof err === 'object' && err !== null && 'response' in err
+          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : undefined;
+      setError(detail || 'Erreur lors de la sauvegarde.');
       console.error('Error updating invoice:', err);
     } finally {
       setSaving(false);
@@ -209,10 +260,10 @@ export default function EditInvoicePage() {
       ? ({
           id: previewCustomer.id,
           name: customerDisplayName(previewCustomer),
-          contactName: previewCustomer.contactName ?? (previewCustomer as any).contact_name,
+          contactName: previewCustomer.contactName,
           email: previewCustomer.email,
           phone: previewCustomer.phone,
-          vat: previewCustomer.vat ?? (previewCustomer as any).vat_number,
+          vat: previewCustomer.vat,
           siret: previewCustomer.siret,
         } as InvoiceCustomer)
       : null,
@@ -506,7 +557,7 @@ export default function EditInvoicePage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => router.push(`/invoices/${invoiceId}`)}
+                onClick={() => router.push(buildDetailPath('invoices', invoiceId))}
               >
                 Annuler
               </Button>

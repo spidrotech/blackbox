@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
 import { invoiceService, quoteService, customerService, projectService, settingsService } from '@/services/api';
-import { InvoiceCreate, Quote, Customer, Project } from '@/types';
+import { InvoiceCreate, Quote, Customer, Project, LineItem, LineItemType } from '@/types';
 import { LineItemsEditor, LineItemData } from '@/components/quotes/LineItemsEditor';
 import InvoicePreview, { InvoicePreviewData, InvoiceCustomer, InvoiceCompany } from '@/components/invoices/InvoicePreview';
 import {
@@ -13,8 +13,26 @@ import {
   getDocumentDefaultsFromCompany,
   mapCompanySettingsToDocumentCompany,
 } from '@/lib/company-settings';
+import { buildDetailPath } from '@/lib/routes';
 
-const toLineItemData = (item: any): LineItemData => ({
+type ApiListResponse<T> = {
+  data?: T[];
+  items?: T[];
+};
+
+type LineItemLike = Partial<LineItemData> & {
+  designation?: string;
+  description?: string;
+  tax_rate?: number;
+};
+
+const getListData = <T,>(response: ApiListResponse<T>): T[] => {
+  if (Array.isArray(response.data)) return response.data;
+  if (Array.isArray(response.items)) return response.items;
+  return [];
+};
+
+const toLineItemData = (item: LineItemLike): LineItemData => ({
   id: item.id,
   description: item.designation ?? item.description ?? '',
   long_description: item.long_description,
@@ -27,7 +45,28 @@ const toLineItemData = (item: any): LineItemData => ({
   reference: item.reference,
 });
 
-export default function NewInvoicePage() {
+const toLineItemType = (itemType: LineItemData['item_type']): LineItemType => {
+  if (itemType === 'supply' || itemType === 'labor' || itemType === 'other') {
+    return itemType;
+  }
+  return 'other';
+};
+
+const toInvoiceLineItem = (item: LineItemData, position: number): LineItem => ({
+  designation: item.description,
+  description: item.description,
+  long_description: item.long_description,
+  item_type: toLineItemType(item.item_type),
+  quantity: item.quantity,
+  unit: item.unit,
+  unit_price: item.unit_price,
+  discount_percent: item.discount_percent,
+  vat_rate: item.vat_rate,
+  reference: item.reference,
+  position,
+});
+
+function NewInvoicePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const quoteIdParam = searchParams.get('quoteId');
@@ -62,6 +101,7 @@ export default function NewInvoicePage() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadData = async () => {
@@ -74,15 +114,9 @@ export default function NewInvoicePage() {
         settingsService.getCompany(),
       ]);
 
-      const allQuotes: Quote[] = Array.isArray(quotesRes.data)
-        ? quotesRes.data
-        : (quotesRes as any).items ?? [];
-      const allCustomers: Customer[] = Array.isArray(customersRes.data)
-        ? customersRes.data
-        : (customersRes as any).items ?? [];
-      const allProjects: Project[] = Array.isArray(projectsRes.data)
-        ? projectsRes.data
-        : (projectsRes as any).items ?? [];
+      const allQuotes = getListData<Quote>(quotesRes as ApiListResponse<Quote>);
+      const allCustomers = getListData<Customer>(customersRes as ApiListResponse<Customer>);
+      const allProjects = getListData<Project>(projectsRes as ApiListResponse<Project>);
 
       setQuotes(allQuotes);
       setCustomers(allCustomers);
@@ -112,15 +146,16 @@ export default function NewInvoicePage() {
   };
 
   const importQuote = (quote: Quote) => {
+    const quoteWithExtras = quote as Quote & { discount_percent?: number; subject?: string };
     setFromQuote(true);
-    setLineItems((quote.line_items ?? []).map(toLineItemData));
+    setLineItems((quote.line_items ?? []).map(item => toLineItemData(item as LineItemLike)));
     setFormData(prev => ({
       ...prev,
       quote_id: quote.id,
       customer_id: quote.customer_id ?? prev.customer_id,
       project_id: quote.project_id ?? prev.project_id,
-      discount_percent: (quote as any).discount_percent ?? prev.discount_percent,
-      subject: (quote as any).subject ?? prev.subject,
+      discount_percent: quoteWithExtras.discount_percent ?? prev.discount_percent,
+      subject: quoteWithExtras.subject ?? prev.subject,
     }));
   };
 
@@ -175,14 +210,14 @@ export default function NewInvoicePage() {
     }
     setLoading(true);
     try {
-      const payload = {
+      const payload: InvoiceCreate = {
         ...formData,
         conditions: formData.terms_and_conditions,
-        line_items: lineItems.map((item, i) => ({ ...item, display_order: i })),
+        line_items: lineItems.map((item, i) => toInvoiceLineItem(item, i)),
       };
-      const res = await invoiceService.create(payload as InvoiceCreate);
+      const res = await invoiceService.create(payload);
       if (res.success && res.data) {
-        router.push(`/invoices/${res.data.id}`);
+        router.push(buildDetailPath('invoices', res.data.id));
       }
     } catch (error) {
       console.error('Error creating invoice:', error);
@@ -206,8 +241,7 @@ export default function NewInvoicePage() {
     { value: '', label: 'Sélectionner un client' },
     ...customers.map(c => ({
       value: String(c.id),
-      label: ((c as any).name ?? (c as any).company_name
-        ?? `${(c as any).first_name ?? ''} ${(c as any).last_name ?? ''}`.trim())
+      label: (c.name ?? `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim())
         || `Client #${c.id}`,
     })),
   ];
@@ -249,15 +283,15 @@ export default function NewInvoicePage() {
         {tab === 'preview' && (() => {
           const previewCustomer = customers.find(c => c.id === formData.customer_id);
           const previewData: InvoicePreviewData = {
-            invoiceDate: (formData as any).invoice_date,
-            dueDate: (formData as any).due_date,
+            invoiceDate: formData.invoice_date,
+            dueDate: formData.due_date,
             description: formData.subject ?? '',
             notes: formData.notes ?? '',
-            conditions: (formData as any).terms_and_conditions,
+            conditions: formData.terms_and_conditions,
             lineItems,
             company,
             customer: previewCustomer
-              ? ({ id: previewCustomer.id, name: (previewCustomer as any).name ?? `${previewCustomer.firstName ?? ''} ${previewCustomer.lastName ?? ''}`.trim(), contactName: previewCustomer.contactName, email: previewCustomer.email, phone: previewCustomer.phone, vat: previewCustomer.vat, siret: previewCustomer.siret } as InvoiceCustomer)
+              ? ({ id: previewCustomer.id, name: previewCustomer.name ?? `${previewCustomer.firstName ?? ''} ${previewCustomer.lastName ?? ''}`.trim(), contactName: previewCustomer.contactName, email: previewCustomer.email, phone: previewCustomer.phone, vat: previewCustomer.vat, siret: previewCustomer.siret } as InvoiceCustomer)
               : null,
           };
           return (
@@ -325,14 +359,14 @@ export default function NewInvoicePage() {
                 label="Date d'émission"
                 name="invoice_date"
                 type="date"
-                value={(formData as any).invoice_date ?? today}
+                value={formData.invoice_date ?? today}
                 onChange={handleChange}
               />
               <Input
                 label="Date d'échéance"
                 name="due_date"
                 type="date"
-                value={(formData as any).due_date ?? thirtyDays}
+                value={formData.due_date ?? thirtyDays}
                 onChange={handleChange}
               />
             </CardContent>
@@ -433,5 +467,21 @@ export default function NewInvoicePage() {
         )}
       </div>
     </MainLayout>
+  );
+}
+
+export default function NewInvoicePage() {
+  return (
+    <Suspense
+      fallback={
+        <MainLayout>
+          <div className="flex items-center justify-center py-20">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+          </div>
+        </MainLayout>
+      }
+    >
+      <NewInvoicePageContent />
+    </Suspense>
   );
 }

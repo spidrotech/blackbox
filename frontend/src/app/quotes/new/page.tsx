@@ -8,13 +8,35 @@ import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
 import { CustomerSelector } from '@/components/customers/CustomerSelector';
 import { NewCustomerForm } from '@/components/customers/NewCustomerForm';
 import { quoteService, customerService, projectService, priceLibraryService, settingsService } from '@/services/api';
-import { QuoteCreate, Customer, Project, PriceLibraryItem } from '@/types';
+import { QuoteCreate, Customer, Project, PriceLibraryItem, LineItem, LineItemType } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { LineItemsEditor, LineItemData } from '@/components/quotes/LineItemsEditor';
 import {
   CompanySettingsData,
   getDocumentDefaultsFromCompany,
 } from '@/lib/company-settings';
+
+const toLineItemType = (itemType: LineItemData['item_type']): LineItemType => {
+  if (itemType === 'supply' || itemType === 'labor' || itemType === 'other') {
+    return itemType;
+  }
+  return 'other';
+};
+
+const toQuoteLineItem = (item: LineItemData, position: number): LineItem => ({
+  designation: item.description,
+  description: item.description,
+  long_description: item.long_description,
+  item_type: toLineItemType(item.item_type),
+  quantity: item.quantity,
+  unit: item.unit,
+  unit_price: item.unit_price,
+  vat_rate: item.vat_rate,
+  discount_percent: item.discount_percent,
+  section: item.section,
+  reference: item.reference,
+  position,
+});
 
 
 export default function NewQuotePage() {
@@ -56,7 +78,7 @@ export default function NewQuotePage() {
     setLineItems(prev => [...prev, {
       description: item.name || item.description || '',
       long_description: item.description || '',
-      item_type: (item.item_type as any) || 'supply',
+      item_type: item.item_type || 'supply',
       quantity: 1,
       unit: item.unit || 'u',
       unit_price: item.unit_price || 0,
@@ -148,9 +170,9 @@ export default function NewQuotePage() {
     if (!formData.customer_id || lineItems.length === 0) { setPdfUrl(null); return; }
     setPdfLoading(true);
     try {
-      const payload = {
+      const payload: QuoteCreate = {
         ...formData,
-        line_items: lineItems,
+        line_items: lineItems.map((item, i) => toQuoteLineItem(item, i)),
         work_start_date: formData.work_start_date || undefined,
         cee_premium: (formData.cee_premium && formData.cee_premium > 0) ? formData.cee_premium : undefined,
         mpr_premium: (formData.mpr_premium && formData.mpr_premium > 0) ? formData.mpr_premium : undefined,
@@ -169,12 +191,12 @@ export default function NewQuotePage() {
     setLoading(true);
     try {
       // Sanitize: strip empty strings for Optional[date] fields
-      const payload = {
+      const payload: QuoteCreate = {
         ...formData,
-        line_items: lineItems,
+        line_items: lineItems.map((item, i) => toQuoteLineItem(item, i)),
         work_start_date: formData.work_start_date || undefined,
-        quote_date: (formData as any).quote_date || undefined,
-        expiry_date: (formData as any).expiry_date || undefined,
+        quote_date: formData.quote_date || undefined,
+        expiry_date: formData.expiry_date || undefined,
         deposit_percent: formData.deposit_percent || undefined,
         cee_premium: (formData.cee_premium && formData.cee_premium > 0) ? formData.cee_premium : undefined,
         mpr_premium: (formData.mpr_premium && formData.mpr_premium > 0) ? formData.mpr_premium : undefined,

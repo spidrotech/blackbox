@@ -5,7 +5,8 @@ import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
 import { projectService, customerService } from '@/services/api';
-import { Project, ProjectCreate, Customer } from '@/types';
+import { ProjectCreate, Customer } from '@/types';
+import { buildDetailPath } from '@/lib/routes';
 
 const statusOptions = [
   { value: 'draft', label: 'Brouillon' },
@@ -53,6 +54,7 @@ export default function EditProjectPage() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   const loadData = async () => {
@@ -95,11 +97,11 @@ export default function EditProjectPage() {
 
   const customerOptions = [
     { value: '', label: 'Sélectionner un client' },
-    ...customers.map(c => ({ value: String(c.id), label: c.company_name || `${c.first_name} ${c.last_name}` })),
+    ...customers.map(c => ({ value: String(c.id), label: c.name || `${c.firstName || ''} ${c.lastName || ''}`.trim() })),
   ];
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
+    const { name, value } = e.target;
     
     if (['customer_id', 'estimated_budget'].includes(name)) {
       setFormData(prev => ({ ...prev, [name]: value ? (name === 'customer_id' ? parseInt(value) : parseFloat(value)) : undefined }));
@@ -115,7 +117,7 @@ export default function EditProjectPage() {
     try {
       const response = await projectService.update(projectId, formData);
       if (response.success) {
-        router.push(`/projects/${projectId}`);
+        router.push(buildDetailPath('projects', projectId));
       }
     } catch (error) {
       console.error('Error updating project:', error);
@@ -295,7 +297,7 @@ export default function EditProjectPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => router.push(`/projects/${projectId}`)}
+              onClick={() => router.push(buildDetailPath('projects', projectId))}
             >
               Annuler
             </Button>

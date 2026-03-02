@@ -32,6 +32,64 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1
 /** Base URL of the API server (without /api/v1), used to resolve relative static file URLs. */
 export const API_BASE_URL = API_URL.replace(/\/api\/v\d+.*$/, '');
 
+type InvoiceGetResponse = ApiResponse<Invoice> & { invoice?: Invoice };
+
+export interface CompanySettingsPayload {
+  id?: number;
+  name?: string;
+  siret?: string;
+  address?: string;
+  postal_code?: string;
+  city?: string;
+  country?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  logo_url?: string;
+  vat_number?: string;
+  invoice_prefix?: string;
+  quote_prefix?: string;
+  next_invoice_number?: number;
+  next_quote_number?: number;
+  default_payment_terms?: string;
+  default_conditions?: string;
+  legal_mentions?: string;
+  header_text?: string;
+  footer_text?: string;
+  visuals_json?: string;
+  labels_json?: string;
+  quote_defaults_json?: string;
+  invoice_defaults_json?: string;
+  cgv_url?: string;
+  iban?: string;
+  bic?: string;
+  rcs_city?: string;
+  rm_number?: string;
+  capital?: number | null;
+  ape_code?: string;
+  vat_subject?: boolean;
+  vat_collection_type?: string;
+  guarantee_type?: string;
+  insurance_name?: string;
+  insurance_coverage?: string;
+  insurance_address?: string;
+  insurance_zipcode?: string;
+  insurance_city?: string;
+}
+
+export interface TeamMemberPayload {
+  id: number;
+  email: string;
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+  company_id?: number;
+  is_active: boolean;
+  role: User['role'];
+  roles?: string[];
+  temporary_password?: string;
+}
+
 // Create axios instance
 const api: AxiosInstance = axios.create({
   baseURL: API_URL,
@@ -306,13 +364,13 @@ export const invoiceService = {
   },
 
   async getById(id: number): Promise<ApiResponse<Invoice>> {
-    const response = await api.get<any>(`/invoices/${id}`);
+    const response = await api.get<InvoiceGetResponse>(`/invoices/${id}`);
     const body = response.data;
     // backend returns { success, data } or { success, invoice } — normalise
     if (body.data === undefined && body.invoice !== undefined) {
-      body.data = body.invoice;
+      return { ...body, data: body.invoice };
     }
-    return body as ApiResponse<Invoice>;
+    return body;
   },
 
   async create(data: InvoiceCreate): Promise<ApiResponse<Invoice>> {
@@ -638,31 +696,75 @@ export default api;
 
 // Settings service
 export const settingsService = {
-  async getCompany(): Promise<ApiResponse<any>> {
-    const response = await api.get<ApiResponse<any>>('/settings/company');
+  async getCompany(): Promise<ApiResponse<CompanySettingsPayload>> {
+    const response = await api.get<ApiResponse<CompanySettingsPayload>>('/settings/company');
     return response.data;
   },
 
-  async updateCompany(data: any): Promise<ApiResponse<any>> {
-    const response = await api.put<ApiResponse<any>>('/settings/company', data);
+  async updateCompany(data: CompanySettingsPayload): Promise<ApiResponse<{ id: number }>> {
+    const response = await api.put<ApiResponse<{ id: number }>>('/settings/company', data);
     return response.data;
   },
 
-  async uploadLogo(file: File): Promise<ApiResponse<any>> {
+  async uploadLogo(file: File): Promise<ApiResponse<{ logo_url: string }>> {
     const form = new FormData();
     form.append('file', file);
-    const response = await api.post('/settings/company/logo', form, {
+    const response = await api.post<ApiResponse<{ logo_url: string }>>('/settings/company/logo', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;
   },
 
-  async uploadCgv(file: File): Promise<ApiResponse<any>> {
+  async uploadCgv(file: File): Promise<ApiResponse<{ cgv_url: string }>> {
     const form = new FormData();
     form.append('file', file);
-    const response = await api.post('/settings/company/cgv', form, {
+    const response = await api.post<ApiResponse<{ cgv_url: string }>>('/settings/company/cgv', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
+    return response.data;
+  },
+
+  async getTeam(): Promise<ApiResponse<TeamMemberPayload[]>> {
+    const response = await api.get<ApiResponse<TeamMemberPayload[]>>('/settings/team');
+    return response.data;
+  },
+
+  async createTeamMember(data: {
+    email: string;
+    first_name?: string;
+    last_name?: string;
+    phone?: string;
+    role?: string;
+    password?: string;
+  }): Promise<ApiResponse<TeamMemberPayload>> {
+    const response = await api.post<ApiResponse<TeamMemberPayload>>('/settings/team', data);
+    return response.data;
+  },
+
+  async updateTeamMember(userId: number, data: {
+    email?: string;
+    first_name?: string;
+    last_name?: string;
+    phone?: string;
+    role?: string;
+    is_active?: boolean;
+  }): Promise<ApiResponse<TeamMemberPayload>> {
+    const response = await api.patch<ApiResponse<TeamMemberPayload>>(`/settings/team/${userId}`, data);
+    return response.data;
+  },
+
+  async removeTeamMember(userId: number): Promise<ApiResponse<{ id: number; is_active: boolean }>> {
+    const response = await api.delete<ApiResponse<{ id: number; is_active: boolean }>>(`/settings/team/${userId}`);
+    return response.data;
+  },
+
+  async updateLoginEmail(data: { email: string; current_password: string }): Promise<ApiResponse<{ email: string }>> {
+    const response = await api.put<ApiResponse<{ email: string }>>('/settings/account/email', data);
+    return response.data;
+  },
+
+  async updatePassword(data: { current_password: string; new_password: string }): Promise<ApiResponse<{ updated: boolean }>> {
+    const response = await api.put<ApiResponse<{ updated: boolean }>>('/settings/account/password', data);
     return response.data;
   },
 };

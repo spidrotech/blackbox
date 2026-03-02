@@ -5,7 +5,8 @@ import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
 import { purchaseService, supplierService, projectService } from '@/services/api';
-import { Purchase, PurchaseCreate, Supplier, Project, PaymentMethod } from '@/types';
+import { PurchaseCreate, Supplier, Project, PaymentMethod } from '@/types';
+import { buildDetailPath } from '@/lib/routes';
 
 const categoryOptions = [
   { value: 'materials', label: 'Matériaux' },
@@ -57,6 +58,7 @@ export default function EditPurchasePage() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [purchaseId]);
 
   const loadData = async () => {
@@ -140,7 +142,7 @@ export default function EditPurchasePage() {
     try {
       const response = await purchaseService.update(purchaseId, formData);
       if (response.success) {
-        router.push(`/purchases/${purchaseId}`);
+        router.push(buildDetailPath('purchases', purchaseId));
       }
     } catch (error) {
       console.error('Error updating purchase:', error);
@@ -297,7 +299,7 @@ export default function EditPurchasePage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => router.push(`/purchases/${purchaseId}`)}
+              onClick={() => router.push(buildDetailPath('purchases', purchaseId))}
             >
               Annuler
             </Button>

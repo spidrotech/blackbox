@@ -7,7 +7,7 @@ export const validators = {
     return undefined;
   },
 
-  required: (value: any): string | undefined => {
+  required: (value: unknown): string | undefined => {
     if (!value || (typeof value === 'string' && value.trim() === '')) {
       return 'Ce champ est requis';
     }
@@ -80,7 +80,7 @@ export const validators = {
 
 // Combined validators
 export const combinedValidators = {
-  required: (value: any) => validators.required(value),
+  required: (value: unknown) => validators.required(value),
   email: (value: string) => validators.email(value),
   phone: (value: string) => validators.phone(value),
   password: (value: string) => validators.password(value),

@@ -3,9 +3,15 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { settingsService } from '@/services/api';
+import { Company } from '@/types';
+
+type SubscriptionCompany = Partial<Company> & {
+  default_conditions?: string;
+  cgv_url?: string;
+};
 
 export default function SubscriptionPage() {
-  const [company, setCompany] = useState<any | null>(null);
+  const [company, setCompany] = useState<SubscriptionCompany | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => { load(); }, []);
@@ -14,7 +20,7 @@ export default function SubscriptionPage() {
     setLoading(true);
     try {
       const res = await settingsService.getCompany();
-      if (res.success) setCompany(res.data);
+      if (res.success) setCompany(res.data ?? null);
     } catch (e) {
       console.error(e);
     } finally { setLoading(false); }
@@ -44,7 +50,7 @@ export default function SubscriptionPage() {
           <div>Votre plan et gestion des paiements sont gérés séparément.</div>
           <div className="mt-2">Pour modifier les paramètres de facturation, mettez à jour votre entreprise:</div>
           <div className="mt-4">
-            <Link href="/settings"><a className="inline-block bg-blue-600 text-white px-4 py-2 rounded">Ouvrir Configuration de compte</a></Link>
+            <Link href="/settings" className="inline-block bg-blue-600 text-white px-4 py-2 rounded">Ouvrir Configuration de compte</Link>
           </div>
         </div>
       </section>

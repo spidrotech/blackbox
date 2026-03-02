@@ -24,10 +24,10 @@ export function CustomerSelector({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const getCustomerName = (customer: any) => {
+  const getCustomerName = (customer: Customer) => {
     if (customer.name) return customer.name;
-    const firstName = customer.firstName || customer.first_name || '';
-    const lastName = customer.lastName || customer.last_name || '';
+    const firstName = customer.firstName || '';
+    const lastName = customer.lastName || '';
     return `${firstName} ${lastName}`.trim() || 'Client inconnu';
   };
 

@@ -6,6 +6,7 @@ import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button } from '@/components/ui';
 import { supplierService } from '@/services/api';
 import { Supplier } from '@/types';
+import { buildEditPath } from '@/lib/routes';
 
 export default function SupplierDetailPage() {
   const router = useRouter();
@@ -18,6 +19,7 @@ export default function SupplierDetailPage() {
 
   useEffect(() => {
     loadSupplier();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supplierId]);
 
   const loadSupplier = async () => {
@@ -81,7 +83,7 @@ export default function SupplierDetailPage() {
           </div>
           <div className="flex gap-2">
             <Button
-              onClick={() => router.push(`/suppliers/${supplierId}/edit`)}
+              onClick={() => router.push(buildEditPath('suppliers', supplierId))}
               variant="primary"
             >
               Modifier
@@ -188,7 +190,7 @@ export default function SupplierDetailPage() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-gray-500">Date d'ajout</label>
+                <label className="text-sm text-gray-500">Date d&apos;ajout</label>
                 <p className="font-medium">
                   {new Date(supplier.created_at || '').toLocaleDateString('fr-FR')}
                 </p>

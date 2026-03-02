@@ -1,14 +1,50 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from fastapi.responses import JSONResponse
-from sqlmodel import Session
+from sqlmodel import Session, select
 import os
 import uuid
 
 from app.db.session import get_session
 from app.core.security import get_current_user_required
+from app.core.security import get_password_hash, verify_password
 from app.models import Company, User
 
 router = APIRouter()
+
+
+ROLE_TO_BACKEND = {
+    'owner': ['ROLE_USER', 'ROLE_OWNER'],
+    'manager': ['ROLE_USER', 'ROLE_MANAGER'],
+    'commercial': ['ROLE_USER', 'ROLE_COMMERCIAL'],
+    'chef_chantier': ['ROLE_USER', 'ROLE_SITE_MANAGER'],
+    'ouvrier': ['ROLE_USER', 'ROLE_WORKER'],
+}
+
+
+def _frontend_role_from_user(user: User, company: Company | None) -> str:
+    if company and company.owner_id == user.id:
+        return 'owner'
+    roles = user.roles or []
+    if 'ROLE_MANAGER' in roles:
+        return 'manager'
+    if 'ROLE_COMMERCIAL' in roles:
+        return 'commercial'
+    if 'ROLE_SITE_MANAGER' in roles:
+        return 'chef_chantier'
+    return 'ouvrier'
+
+
+def _serialize_user(user: User, company: Company | None) -> dict:
+    return {
+        'id': user.id,
+        'email': user.email,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'phone': user.phone,
+        'company_id': user.company_id,
+        'is_active': user.is_active,
+        'role': _frontend_role_from_user(user, company),
+        'roles': user.roles,
+    }
 
 
 @router.get('/company', response_model=dict)
@@ -130,3 +166,157 @@ def upload_cgv(file: UploadFile = File(...), current_user: User = Depends(get_cu
     session.commit()
     session.refresh(company)
     return {'success': True, 'data': {'cgv_url': company.cgv_url}}
+
+
+@router.get('/team', response_model=dict)
+def get_team(current_user: User = Depends(get_current_user_required), session: Session = Depends(get_session)):
+    company = session.get(Company, current_user.company_id) if getattr(current_user, 'company_id', None) else None
+    if not company:
+        raise HTTPException(status_code=404, detail='Company not found')
+
+    members = session.exec(
+        select(User).where(User.company_id == company.id).order_by(User.created_at.asc())
+    ).all()
+    return {'success': True, 'data': [_serialize_user(member, company) for member in members]}
+
+
+@router.post('/team', response_model=dict)
+def create_team_member(payload: dict, current_user: User = Depends(get_current_user_required), session: Session = Depends(get_session)):
+    company = session.get(Company, current_user.company_id) if getattr(current_user, 'company_id', None) else None
+    if not company:
+        raise HTTPException(status_code=404, detail='Company not found')
+
+    email = (payload.get('email') or '').strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail='Email requis')
+
+    existing = session.exec(select(User).where(User.email == email)).first()
+    if existing:
+        raise HTTPException(status_code=400, detail='Un utilisateur avec cet email existe déjà')
+
+    role = payload.get('role') or 'ouvrier'
+    if role not in ROLE_TO_BACKEND:
+        role = 'ouvrier'
+
+    provided_password = (payload.get('password') or '').strip()
+    temp_password = provided_password or uuid.uuid4().hex[:12]
+
+    user = User(
+        email=email,
+        password=get_password_hash(temp_password),
+        first_name=(payload.get('first_name') or None),
+        last_name=(payload.get('last_name') or None),
+        phone=(payload.get('phone') or None),
+        company_id=company.id,
+        roles=ROLE_TO_BACKEND.get(role, ROLE_TO_BACKEND['ouvrier']),
+        is_active=True,
+    )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+
+    data = _serialize_user(user, company)
+    if not provided_password:
+        data['temporary_password'] = temp_password
+
+    return {'success': True, 'data': data}
+
+
+@router.patch('/team/{user_id}', response_model=dict)
+def update_team_member(user_id: int, payload: dict, current_user: User = Depends(get_current_user_required), session: Session = Depends(get_session)):
+    company = session.get(Company, current_user.company_id) if getattr(current_user, 'company_id', None) else None
+    if not company:
+        raise HTTPException(status_code=404, detail='Company not found')
+
+    user = session.get(User, user_id)
+    if not user or user.company_id != company.id:
+        raise HTTPException(status_code=404, detail='Utilisateur introuvable')
+
+    if 'email' in payload:
+        email = (payload.get('email') or '').strip().lower()
+        if not email:
+            raise HTTPException(status_code=400, detail='Email invalide')
+        if email != user.email:
+            existing = session.exec(select(User).where(User.email == email)).first()
+            if existing and existing.id != user.id:
+                raise HTTPException(status_code=400, detail='Un utilisateur avec cet email existe déjà')
+            user.email = email
+
+    if 'first_name' in payload:
+        user.first_name = payload.get('first_name') or None
+    if 'last_name' in payload:
+        user.last_name = payload.get('last_name') or None
+    if 'phone' in payload:
+        user.phone = payload.get('phone') or None
+    if 'is_active' in payload:
+        user.is_active = bool(payload.get('is_active'))
+
+    if 'role' in payload and user.id != company.owner_id:
+        role = payload.get('role')
+        if role not in ROLE_TO_BACKEND:
+            raise HTTPException(status_code=400, detail='Rôle invalide')
+        user.roles = ROLE_TO_BACKEND[role]
+
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return {'success': True, 'data': _serialize_user(user, company)}
+
+
+@router.delete('/team/{user_id}', response_model=dict)
+def remove_team_member(user_id: int, current_user: User = Depends(get_current_user_required), session: Session = Depends(get_session)):
+    company = session.get(Company, current_user.company_id) if getattr(current_user, 'company_id', None) else None
+    if not company:
+        raise HTTPException(status_code=404, detail='Company not found')
+
+    user = session.get(User, user_id)
+    if not user or user.company_id != company.id:
+        raise HTTPException(status_code=404, detail='Utilisateur introuvable')
+    if user.id == company.owner_id:
+        raise HTTPException(status_code=400, detail='Le propriétaire ne peut pas être supprimé')
+
+    user.is_active = False
+    session.add(user)
+    session.commit()
+    return {'success': True, 'data': {'id': user.id, 'is_active': False}}
+
+
+@router.put('/account/email', response_model=dict)
+def update_login_email(payload: dict, current_user: User = Depends(get_current_user_required), session: Session = Depends(get_session)):
+    current_password = (payload.get('current_password') or '').strip()
+    new_email = (payload.get('email') or '').strip().lower()
+
+    if not current_password:
+        raise HTTPException(status_code=400, detail='Mot de passe actuel requis')
+    if not verify_password(current_password, current_user.password):
+        raise HTTPException(status_code=400, detail='Mot de passe actuel incorrect')
+    if not new_email:
+        raise HTTPException(status_code=400, detail='Nouvel email requis')
+
+    existing = session.exec(select(User).where(User.email == new_email)).first()
+    if existing and existing.id != current_user.id:
+        raise HTTPException(status_code=400, detail='Un utilisateur avec cet email existe déjà')
+
+    current_user.email = new_email
+    session.add(current_user)
+    session.commit()
+    session.refresh(current_user)
+    return {'success': True, 'data': {'email': current_user.email}}
+
+
+@router.put('/account/password', response_model=dict)
+def update_password(payload: dict, current_user: User = Depends(get_current_user_required), session: Session = Depends(get_session)):
+    current_password = (payload.get('current_password') or '').strip()
+    new_password = (payload.get('new_password') or '').strip()
+
+    if not current_password or not new_password:
+        raise HTTPException(status_code=400, detail='Mot de passe actuel et nouveau requis')
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail='Le nouveau mot de passe doit contenir au moins 8 caractères')
+    if not verify_password(current_password, current_user.password):
+        raise HTTPException(status_code=400, detail='Mot de passe actuel incorrect')
+
+    current_user.password = get_password_hash(new_password)
+    session.add(current_user)
+    session.commit()
+    return {'success': True, 'data': {'updated': True}}

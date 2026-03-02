@@ -6,7 +6,8 @@ import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Input, Select } from '@/components/ui';
 import { purchaseService, supplierService, projectService } from '@/services/api';
 import { Purchase, Supplier, Project } from '@/types';
-import { formatDate, formatCurrency, getStatusLabel } from '@/lib/utils';
+import { formatDate, formatCurrency } from '@/lib/utils';
+import { buildEditPath } from '@/lib/routes';
 
 const categoryOptions = [
   { value: '', label: 'Toutes les catégories' },
@@ -272,7 +273,7 @@ export default function PurchasesPage() {
                           </button>
                         )}
                         <Link
-                          href={`/purchases/${purchase.id}/edit`}
+                          href={buildEditPath('purchases', purchase.id)}
                           className="text-gray-600 hover:text-gray-900 mr-4"
                         >
                           Modifier

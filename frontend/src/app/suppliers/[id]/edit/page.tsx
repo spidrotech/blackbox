@@ -3,17 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
-import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Button, Input } from '@/components/ui';
 import { supplierService } from '@/services/api';
-import { Supplier, SupplierCreate } from '@/types';
-
-const categoryOptions = [
-  { value: 'materials', label: 'Matériaux' },
-  { value: 'tools', label: 'Outils' },
-  { value: 'equipment', label: 'Équipement' },
-  { value: 'services', label: 'Services' },
-  { value: 'other', label: 'Autre' },
-];
+import { SupplierCreate } from '@/types';
+import { buildDetailPath } from '@/lib/routes';
 
 export default function EditSupplierPage() {
   const router = useRouter();
@@ -41,6 +34,7 @@ export default function EditSupplierPage() {
 
   useEffect(() => {
     loadSupplier();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supplierId]);
 
   const loadSupplier = async () => {
@@ -90,7 +84,7 @@ export default function EditSupplierPage() {
     try {
       const response = await supplierService.update(supplierId, formData);
       if (response.success) {
-        router.push(`/suppliers/${supplierId}`);
+        router.push(buildDetailPath('suppliers', supplierId));
       }
     } catch (error) {
       console.error('Error updating supplier:', error);
@@ -235,7 +229,7 @@ export default function EditSupplierPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => router.push(`/suppliers/${supplierId}`)}
+              onClick={() => router.push(buildDetailPath('suppliers', supplierId))}
             >
               Annuler
             </Button>

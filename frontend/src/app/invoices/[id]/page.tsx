@@ -4,9 +4,24 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { MainLayout } from '@/components/layout';
-import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '@/components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Button } from '@/components/ui';
 import { invoiceService } from '@/services/api';
-import { Invoice } from '@/types';
+import { Invoice, LineItem } from '@/types';
+import { buildDetailPath, buildEditPath } from '@/lib/routes';
+
+type InvoiceCustomerLike = NonNullable<Invoice['customer']> & {
+  company_name?: string;
+  contact_name?: string;
+  mobile?: string;
+  vat_number?: string;
+  first_name?: string;
+  last_name?: string;
+};
+
+type InvoiceLineItemLike = LineItem & {
+  total_ht?: number;
+  tax_rate?: number;
+};
 
 /* ─── Status helpers ──────────────────────────────────────────────────────── */
 
@@ -221,8 +236,8 @@ export default function InvoiceDetailPage() {
   const invoiceDate = invoice.invoiceDate ?? invoice.invoice_date;
   const dueDate = invoice.dueDate ?? invoice.due_date;
   const paidDate = invoice.paidDate ?? invoice.paid_date;
-  const lineItems = invoice.lineItems ?? invoice.line_items ?? [];
-  const customer = invoice.customer;
+  const lineItems: InvoiceLineItemLike[] = (invoice.lineItems ?? invoice.line_items ?? []) as InvoiceLineItemLike[];
+  const customer = invoice.customer as InvoiceCustomerLike | undefined;
   const quoteId = invoice.quoteId ?? invoice.quote_id;
 
   const isOverdue =
@@ -259,7 +274,7 @@ export default function InvoiceDetailPage() {
                 </span>
               )}
               {quoteId && (
-                <Link href={`/quotes/${quoteId}`} className="text-sm text-blue-600 hover:underline">
+                <Link href={buildDetailPath('quotes', quoteId)} className="text-sm text-blue-600 hover:underline">
                   Devis #{quoteId}
                 </Link>
               )}
@@ -289,7 +304,7 @@ export default function InvoiceDetailPage() {
             >
               📄 PDF
             </Button>
-            <Button variant="outline" onClick={() => router.push(`/invoices/${invoiceId}/edit`)}>
+            <Button variant="outline" onClick={() => router.push(buildEditPath('invoices', invoiceId))}>
               Modifier
             </Button>
             <Button variant="danger" onClick={handleDelete} loading={deleting}>
@@ -308,19 +323,19 @@ export default function InvoiceDetailPage() {
               {customer ? (
                 <>
                   <Link
-                    href={`/customers/${invoice.customerId ?? invoice.customer_id}`}
+                    href={buildDetailPath('customers', invoice.customerId ?? invoice.customer_id ?? '')}
                     className="font-medium text-blue-600 hover:underline block"
                   >
-                    {(customer as any).name ?? (customer as any).company_name ?? '—'}
+                    {customer.name ?? customer.company_name ?? '—'}
                   </Link>
-                  {(customer as any).contact_name && (
-                    <p className="text-gray-600 text-xs">{(customer as any).contact_name}</p>
+                  {customer.contactName && (
+                    <p className="text-gray-600 text-xs">{customer.contactName}</p>
                   )}
-                  {(customer as any).email && (
-                    <p className="text-gray-500">{(customer as any).email}</p>
+                  {customer.email && (
+                    <p className="text-gray-500">{customer.email}</p>
                   )}
-                  {((customer as any).phone || (customer as any).mobile) && (
-                    <p className="text-gray-500">{(customer as any).phone ?? (customer as any).mobile}</p>
+                  {(customer.phone || customer.mobile) && (
+                    <p className="text-gray-500">{customer.phone ?? customer.mobile}</p>
                   )}
                 </>
               ) : (
@@ -405,11 +420,10 @@ export default function InvoiceDetailPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {lineItems.map((item, idx) => {
-                      const itemType = (item as any).item_type;
+                      const itemType = String(item.item_type ?? 'other');
                       const isSection = itemType === 'section';
                       const isText = itemType === 'text';
                       const isPageBreak = itemType === 'page_break';
-                      const isStructural = isSection || isText || isPageBreak;
 
                       if (isPageBreak) {
                         return (
@@ -425,7 +439,7 @@ export default function InvoiceDetailPage() {
                         return (
                           <tr key={idx} className="bg-blue-50">
                             <td colSpan={6} className="py-2 px-4 font-semibold text-blue-800 uppercase text-xs tracking-wide">
-                              {(item as any).description ?? (item as any).designation}
+                              {item.description ?? item.designation}
                             </td>
                           </tr>
                         );
@@ -435,27 +449,27 @@ export default function InvoiceDetailPage() {
                         return (
                           <tr key={idx} className="bg-gray-50">
                             <td colSpan={6} className="py-2 px-4 text-xs text-gray-600 italic">
-                              {(item as any).description ?? (item as any).designation}
+                              {item.description ?? item.designation}
                             </td>
                           </tr>
                         );
                       }
 
-                      const qty = (item as any).quantity ?? 0;
-                      const up = (item as any).unit_price ?? 0;
-                      const totalHtLine = (item as any).total_ht ?? qty * up;
-                      const vatRate = (item as any).vat_rate ?? (item as any).tax_rate ?? 0;
+                      const qty = item.quantity ?? 0;
+                      const up = item.unit_price ?? 0;
+                      const totalHtLine = item.total_ht ?? qty * up;
+                      const vatRate = item.vat_rate ?? item.tax_rate ?? 0;
 
                       return (
                         <tr key={idx} className="hover:bg-gray-50 transition-colors">
                           <td className="py-2.5 px-4">
-                            <p className="font-medium">{(item as any).designation ?? (item as any).description}</p>
-                            {(item as any).long_description && (
-                              <p className="text-gray-500 text-xs mt-0.5">{(item as any).long_description}</p>
+                            <p className="font-medium">{item.designation ?? item.description}</p>
+                            {item.long_description && (
+                              <p className="text-gray-500 text-xs mt-0.5">{item.long_description}</p>
                             )}
                           </td>
                           <td className="text-right py-2.5 px-3 tabular-nums">{qty}</td>
-                          <td className="py-2.5 px-3 text-gray-500">{(item as any).unit ?? 'u'}</td>
+                          <td className="py-2.5 px-3 text-gray-500">{item.unit ?? 'u'}</td>
                           <td className="text-right py-2.5 px-3 tabular-nums">{fmt(up)}</td>
                           <td className="text-right py-2.5 px-3 text-gray-500">{vatRate}%</td>
                           <td className="text-right py-2.5 px-4 font-medium tabular-nums">{fmt(totalHtLine)}</td>

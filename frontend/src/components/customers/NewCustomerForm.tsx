@@ -28,6 +28,22 @@ interface CompanySuggestion {
   city: string;
 }
 
+interface CompanyApiResult {
+  nom_complet?: string;
+  nom_raison_sociale?: string;
+  siren?: string;
+  siege?: {
+    siret?: string;
+    adresse?: string;
+    code_postal?: string;
+    commune?: string;
+  };
+}
+
+interface CompanyApiResponse {
+  results?: CompanyApiResult[];
+}
+
 const emptyAddr: Addr = { street: '', street2: '', postalCode: '', city: '', country: 'France' };
 
 export function NewCustomerForm({ onSuccess, onClose }: Props) {
@@ -59,8 +75,8 @@ export function NewCustomerForm({ onSuccess, onClose }: Props) {
         `https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(q)}&per_page=6`,
       );
       if (!res.ok) return;
-      const data = await res.json();
-      const results: CompanySuggestion[] = (data.results || []).map((r: any) => ({
+      const data = (await res.json()) as CompanyApiResponse;
+      const results: CompanySuggestion[] = (data.results || []).map((r) => ({
         name: r.nom_complet || r.nom_raison_sociale || '',
         siret: r.siege?.siret || '',
         siren: r.siren || '',

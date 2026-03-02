@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MainLayout } from '@/components/layout';
 import { dashboardService } from '@/services/api';
+import { buildDetailPath } from '@/lib/routes';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
@@ -49,9 +50,9 @@ interface DashData {
     quotesCreated: number;
     quotesAccepted: number;
   }[];
-  recentProjects: { id: number; name: string; status: string; customer_name: string; budget: number; worksite_address?: string; type?: string }[];
-  recentQuotes: { id: number; reference: string; status: string; customer_name: string; amount: number; date?: string }[];
-  recentInvoices: { id: number; reference: string; status: string; customer_name: string; amount: number; amount_paid: number; date?: string; due_date?: string }[];
+  recentProjects: { id: number; name: string; status: string; customer_name?: string; budget?: number; worksite_address?: string; type?: string; createdAt?: string }[];
+  recentQuotes: { id: number; reference: string; status: string; customer_name?: string; amount?: number; date?: string; createdAt?: string }[];
+  recentInvoices: { id: number; reference: string; status: string; customer_name?: string; amount?: number; amount_paid?: number; date?: string; due_date?: string; createdAt?: string }[];
 }
 
 export default function DashboardPage() {
@@ -63,7 +64,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     dashboardService.getData().then(res => {
-      if (res.success && res.data) setData(res.data as any);
+      if (res.success && res.data) setData(res.data as DashData);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -172,9 +173,9 @@ export default function DashboardPage() {
                   <li key={`${p.type ?? 'project'}-${p.id}`} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors">
                     <div className="min-w-0">
                       {p.type === 'quote_worksite' ? (
-                        <Link href={`/quotes/${p.id}`} className="text-sm font-medium text-gray-800 hover:text-blue-600 truncate block">{p.name}</Link>
+                        <Link href={buildDetailPath('quotes', p.id)} className="text-sm font-medium text-gray-800 hover:text-blue-600 truncate block">{p.name}</Link>
                       ) : (
-                        <Link href={`/projects/${p.id}`} className="text-sm font-medium text-gray-800 hover:text-blue-600 truncate block">{p.name}</Link>
+                        <Link href={buildDetailPath('projects', p.id)} className="text-sm font-medium text-gray-800 hover:text-blue-600 truncate block">{p.name}</Link>
                       )}
                       <span className="text-xs text-gray-400">
                         {p.customer_name || ''}
@@ -211,11 +212,11 @@ export default function DashboardPage() {
                       <li key={q.id} className="px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
                         <span className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${b.cls}`}>{b.label}</span>
                         <div className="min-w-0 flex-1">
-                          <Link href={`/quotes/${q.id}`} className="text-sm font-medium text-gray-800 hover:text-blue-600 block truncate">{q.reference}</Link>
+                          <Link href={buildDetailPath('quotes', q.id)} className="text-sm font-medium text-gray-800 hover:text-blue-600 block truncate">{q.reference}</Link>
                           <span className="text-xs text-gray-400">{q.customer_name || ''}</span>
                         </div>
                         <div className="text-right shrink-0">
-                          <p className="text-sm font-medium text-gray-800">{fmt(q.amount)}</p>
+                          <p className="text-sm font-medium text-gray-800">{fmt(q.amount ?? 0)}</p>
                           <p className="text-xs text-gray-400">{fmtDate(q.date)}</p>
                         </div>
                       </li>
@@ -230,16 +231,16 @@ export default function DashboardPage() {
                 <ul className="divide-y divide-gray-50">
                   {d.recentInvoices.slice(0, 8).map(i => {
                     const b = INV_BADGE[i.status] ?? { label: i.status, cls: 'bg-gray-100 text-gray-600' };
-                    const reste = i.amount - i.amount_paid;
+                    const reste = (i.amount ?? 0) - (i.amount_paid ?? 0);
                     return (
                       <li key={i.id} className="px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors">
                         <span className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${b.cls}`}>{b.label}</span>
                         <div className="min-w-0 flex-1">
-                          <Link href={`/invoices/${i.id}`} className="text-sm font-medium text-gray-800 hover:text-blue-600 block truncate">{i.reference}</Link>
+                          <Link href={buildDetailPath('invoices', i.id)} className="text-sm font-medium text-gray-800 hover:text-blue-600 block truncate">{i.reference}</Link>
                           <span className="text-xs text-gray-400">{i.customer_name || ''}</span>
                         </div>
                         <div className="text-right shrink-0">
-                          <p className="text-sm font-medium text-gray-800">{fmt(i.amount)}</p>
+                          <p className="text-sm font-medium text-gray-800">{fmt(i.amount ?? 0)}</p>
                           {reste > 0 ? <p className="text-xs text-red-400">Reste {fmt(reste)}</p> : <p className="text-xs text-green-500">Soldée</p>}
                         </div>
                       </li>

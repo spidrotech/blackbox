@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MainLayout } from '@/components/layout';
-import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Input, Select } from '@/components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Button, Select } from '@/components/ui';
 import { timeEntryService, projectService } from '@/services/api';
-import { TimeEntry, Project, User } from '@/types';
+import { TimeEntry, Project } from '@/types';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { buildEditPath } from '@/lib/routes';
 
 const filterOptions = [
   { value: 'all', label: 'Tous' },
@@ -254,7 +255,7 @@ export default function TimeEntriesPage() {
                           </>
                         )}
                         <Link
-                          href={`/time-entries/${entry.id}/edit`}
+                          href={buildEditPath('time-entries', entry.id)}
                           className="text-gray-600 hover:text-gray-900 mr-4"
                         >
                           Modifier

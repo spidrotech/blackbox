@@ -5,7 +5,8 @@ import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
 import { priceLibraryService } from '@/services/api';
-import { PriceLibraryItem, PriceLibraryItemCreate } from '@/types';
+import { PriceLibraryItemCreate } from '@/types';
+import { buildDetailPath } from '@/lib/routes';
 
 const typeOptions = [
   { value: 'supply', label: 'Fourniture' },
@@ -78,6 +79,7 @@ export default function EditPriceLibraryItemPage() {
 
   useEffect(() => {
     loadItem();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId]);
 
   const loadItem = async () => {
@@ -133,7 +135,7 @@ export default function EditPriceLibraryItemPage() {
     try {
       const response = await priceLibraryService.update(itemId, formData);
       if (response.success) {
-        router.push(`/price-library/${itemId}`);
+        router.push(buildDetailPath('price-library', itemId));
       }
     } catch (error) {
       console.error('Error updating item:', error);
@@ -293,7 +295,7 @@ export default function EditPriceLibraryItemPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => router.push(`/price-library/${itemId}`)}
+              onClick={() => router.push(buildDetailPath('price-library', itemId))}
             >
               Annuler
             </Button>

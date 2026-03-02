@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MainLayout } from '@/components/layout';
-import { Card, CardContent, CardHeader, CardTitle, Button, Input } from '@/components/ui';
+import { Card, CardContent, Button, Input } from '@/components/ui';
 import { supplierService } from '@/services/api';
 import { Supplier } from '@/types';
+import { buildDetailPath, buildEditPath } from '@/lib/routes';
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -178,13 +179,13 @@ export default function SuppliersPage() {
 
                   <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between">
                     <Link
-                      href={`/suppliers/${supplier.id}`}
+                      href={buildDetailPath('suppliers', supplier.id)}
                       className="text-sm text-blue-600 hover:text-blue-800"
                     >
                       Voir
                     </Link>
                     <Link
-                      href={`/suppliers/${supplier.id}/edit`}
+                      href={buildEditPath('suppliers', supplier.id)}
                       className="text-sm text-gray-600 hover:text-gray-800"
                     >
                       Modifier

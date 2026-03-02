@@ -7,6 +7,7 @@ import { Input } from '@/components/ui';
 import { projectService, customerService } from '@/services/api';
 import { Project, Customer } from '@/types';
 import { formatDate } from '@/lib/utils';
+import { buildDetailPath, buildEditPath } from '@/lib/routes';
 
 const BADGE: Record<string, { label: string; cls: string }> = {
   draft:       { label: 'Brouillon',  cls: 'bg-gray-100 text-gray-600' },
@@ -62,9 +63,7 @@ export default function ProjectsPage() {
     if (!customerId) return '-';
     const customer = customers.find(c => c.id === customerId);
     if (!customer) return '-';
-    return customer.customer_type === 'company' 
-      ? customer.company_name 
-      : `${customer.first_name} ${customer.last_name}`;
+    return customer.name || `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || '-';
   };
 
   const filteredProjects = projects.filter(project => {
@@ -153,8 +152,8 @@ export default function ProjectsPage() {
                           {project.end_date && <div className="text-xs text-gray-400">Fin : {formatDate(project.end_date)}</div>}
                         </td>
                         <td className="px-5 py-3.5 text-right text-sm">
-                          <Link href={`/projects/${project.id}`} className="text-blue-600 hover:underline mr-3">Voir</Link>
-                          <Link href={`/projects/${project.id}/edit`} className="text-gray-500 hover:underline">Modifier</Link>
+                          <Link href={buildDetailPath('projects', project.id)} className="text-blue-600 hover:underline mr-3">Voir</Link>
+                          <Link href={buildEditPath('projects', project.id)} className="text-gray-500 hover:underline">Modifier</Link>
                         </td>
                       </tr>
                     );

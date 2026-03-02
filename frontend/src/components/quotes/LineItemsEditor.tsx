@@ -212,7 +212,6 @@ export function LineItemRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const isStructural = ['section', 'text', 'page_break'].includes(item.item_type);
   const qty = item.quantity ?? 1;
   const pu = item.unit_price ?? 0;
   const disc = item.discount_percent ?? 0;
@@ -418,7 +417,7 @@ function ActionMenu({
   total: number;
   menuOpen: boolean;
   setMenuOpen: (v: boolean) => void;
-  menuRef: React.RefObject<HTMLDivElement>;
+  menuRef: React.RefObject<HTMLDivElement | null>;
   onMoveUp: (i: number) => void;
   onMoveDown: (i: number) => void;
   onInsert: (i: number, pos: 'before' | 'after', type: ItemType) => void;
@@ -576,7 +575,7 @@ export function LineItemsEditor({ items, onChange, priceLibrary = [] }: LineItem
         </button>
         <button type="button" onClick={() => addNew('labor')}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-orange-600 hover:text-orange-800 hover:bg-orange-50 px-3 py-1.5 rounded-lg transition-colors border border-orange-100">
-          + Main d'\u0153uvre
+          + Main d&apos;\u0153uvre
         </button>
         <button type="button" onClick={() => addNew('section')}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors border border-slate-200">

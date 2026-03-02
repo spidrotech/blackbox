@@ -7,8 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from 
 import { AddressAutocomplete, AddressResult } from '@/components/ui/AddressAutocomplete';
 import { customerService } from '@/services/api';
 import { Customer, CustomerType } from '@/types';
+import { buildDetailPath } from '@/lib/routes';
 
-interface CustomerFormData {
+interface CustomerFormData extends Record<string, unknown> {
   customer_type: CustomerType;
   company_name?: string;
   first_name?: string;
@@ -31,7 +32,6 @@ export default function EditCustomerPage() {
   const params = useParams();
   const customerId = params.id as string;
 
-  const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -61,23 +61,22 @@ export default function EditCustomerPage() {
         const response = await customerService.getById(parseInt(customerId));
         if (response.success && response.data) {
           const customerData = response.data as Customer;
-          setCustomer(customerData);
           setFormData({
-            customer_type: customerData.customer_type || 'individual',
-            company_name: customerData.company_name || '',
-            first_name: customerData.first_name || '',
-            last_name: customerData.last_name || '',
+            customer_type: customerData.type || 'individual',
+            company_name: customerData.name || '',
+            first_name: customerData.firstName || '',
+            last_name: customerData.lastName || '',
             email: customerData.email || '',
             phone: customerData.phone || '',
             mobile: customerData.mobile || '',
             siret: customerData.siret || '',
-            vat_number: customerData.vat_number || '',
+            vat_number: customerData.vat || '',
             notes: customerData.notes || '',
-            billing_street: customerData.billing_street || '',
-            billing_city: customerData.billing_city || '',
-            billing_postal_code: customerData.billing_postal_code || '',
-            billing_country: customerData.billing_country || '',
-            is_active: customerData.is_active ?? true,
+            billing_street: customerData.billingAddress?.street || customerData.address?.street || '',
+            billing_city: customerData.billingAddress?.city || customerData.address?.city || '',
+            billing_postal_code: customerData.billingAddress?.postal_code || customerData.address?.postal_code || '',
+            billing_country: customerData.billingAddress?.country || customerData.address?.country || '',
+            is_active: customerData.isActive ?? true,
           });
         } else {
           setError('Client non trouvé');
@@ -96,13 +95,14 @@ export default function EditCustomerPage() {
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
-    const { name, value, type } = e.target as any;
+    const target = e.target;
+    const { name } = target;
+    const value = target instanceof HTMLInputElement && target.type === 'checkbox'
+      ? target.checked
+      : target.value;
     setFormData((prev) => ({
       ...prev,
-      [name]:
-        type === 'checkbox'
-          ? (e.target as HTMLInputElement).checked
-          : value,
+      [name]: value,
     }));
   };
 
@@ -110,9 +110,9 @@ export default function EditCustomerPage() {
     e.preventDefault();
     try {
       setSaving(true);
-      const response = await customerService.update(parseInt(customerId), formData);
+      const response = await customerService.update(parseInt(customerId), formData as Record<string, unknown>);
       if (response.success) {
-        router.push(`/customers/${customerId}`);
+        router.push(buildDetailPath('customers', customerId));
       } else {
         setError(response.message || 'Erreur lors de la sauvegarde');
       }
@@ -305,7 +305,7 @@ export default function EditCustomerPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => router.push(`/customers/${customerId}`)}
+                  onClick={() => router.push(buildDetailPath('customers', customerId))}
                 >
                   Annuler
                 </Button>

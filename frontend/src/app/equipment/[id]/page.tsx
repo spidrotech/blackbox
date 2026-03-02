@@ -6,6 +6,7 @@ import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '@/components/ui';
 import { equipmentService } from '@/services/api';
 import { Equipment } from '@/types';
+import { buildEditPath } from '@/lib/routes';
 
 const categoryLabels: Record<string, string> = {
   power_tools: 'Outillage électroportatif',
@@ -28,6 +29,7 @@ export default function EquipmentDetailPage() {
 
   useEffect(() => {
     loadEquipment();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [equipmentId]);
 
   const loadEquipment = async () => {
@@ -91,7 +93,7 @@ export default function EquipmentDetailPage() {
           </div>
           <div className="flex gap-2">
             <Button
-              onClick={() => router.push(`/equipment/${equipmentId}/edit`)}
+              onClick={() => router.push(buildEditPath('equipment', equipmentId))}
               variant="primary"
             >
               Modifier
@@ -147,7 +149,7 @@ export default function EquipmentDetailPage() {
             <div className="grid grid-cols-2 gap-4">
               {equipment.purchase_date && (
                 <div>
-                  <label className="text-sm text-gray-500">Date d'achat</label>
+                  <label className="text-sm text-gray-500">Date d&apos;achat</label>
                   <p className="font-medium">
                     {new Date(equipment.purchase_date).toLocaleDateString('fr-FR')}
                   </p>
@@ -155,7 +157,7 @@ export default function EquipmentDetailPage() {
               )}
               {equipment.purchase_price && (
                 <div>
-                  <label className="text-sm text-gray-500">Prix d'achat</label>
+                  <label className="text-sm text-gray-500">Prix d&apos;achat</label>
                   <p className="font-medium">
                     {equipment.purchase_price.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
                   </p>
@@ -183,7 +185,7 @@ export default function EquipmentDetailPage() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-gray-500">Date d'ajout</label>
+                <label className="text-sm text-gray-500">Date d&apos;ajout</label>
                 <p className="font-medium">
                   {new Date(equipment.created_at || '').toLocaleDateString('fr-FR')}
                 </p>

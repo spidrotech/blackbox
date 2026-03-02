@@ -5,12 +5,63 @@ import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
 import { quoteService, customerService, projectService, settingsService } from '@/services/api';
-import { QuoteCreate, Customer, Project } from '@/types';
+import { QuoteCreate, Customer, Project, LineItem, LineItemType } from '@/types';
 import { LineItemsEditor, LineItemData } from '@/components/quotes/LineItemsEditor';
 import {
   CompanySettingsData,
   getDocumentDefaultsFromCompany,
 } from '@/lib/company-settings';
+import { buildDetailPath } from '@/lib/routes';
+
+type QuoteLineLike = LineItemData & {
+  designation?: string;
+};
+
+type QuoteLike = QuoteCreate & {
+  customerId?: number;
+  projectId?: number;
+  lineItems?: QuoteLineLike[];
+  expiry_date?: string;
+  expiryDate?: string;
+  quote_date?: string;
+  quoteDate?: string;
+  deposit_percentage?: number;
+  global_discount_percent?: number;
+  ceePremium?: number;
+  mprPremium?: number;
+  waste_management?: number;
+  worksiteAddress?: string;
+  footerNotes?: string;
+  bankDetails?: string;
+  legalMentions?: string;
+  paymentTerms?: string;
+};
+
+type QuoteByIdResponseLike = {
+  quote?: QuoteLike;
+  data?: QuoteLike;
+};
+
+const toLineItemType = (itemType?: LineItemData['item_type']): LineItemType => {
+  if (itemType === 'supply' || itemType === 'labor' || itemType === 'other') {
+    return itemType;
+  }
+  return 'other';
+};
+
+const toQuoteLineItem = (item: LineItemData): LineItem => ({
+  designation: item.description,
+  description: item.description,
+  long_description: item.long_description,
+  item_type: toLineItemType(item.item_type),
+  quantity: item.quantity,
+  unit: item.unit,
+  unit_price: item.unit_price,
+  vat_rate: item.vat_rate,
+  discount_percent: item.discount_percent,
+  section: item.section,
+  reference: item.reference,
+});
 
 export default function EditQuotePage() {
   const router = useRouter();
@@ -49,6 +100,7 @@ export default function EditQuotePage() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quoteId]);
 
   const loadData = async () => {
@@ -64,10 +116,28 @@ export default function EditQuotePage() {
         ? getDocumentDefaultsFromCompany(settingsRes.data as CompanySettingsData)
         : { conditions: DEFAULT_CGV, paymentTerms: '', bankDetails: '', legalMentions: '' };
       
-      const quoteData = (quoteRes as any).quote ?? quoteRes.data;
+      const quoteData = (quoteRes as QuoteByIdResponseLike).quote ?? quoteRes.data;
       if (quoteRes.success && quoteData) {
-        const q = quoteData as any;
+        const q = quoteData as QuoteLike;
         const lineItems = q.line_items || q.lineItems || [];
+        const normalizedLineItems: LineItem[] = lineItems.map((li) => ({
+          designation: li.designation || li.description || '',
+          description: li.description || li.designation || '',
+          long_description: li.long_description,
+          item_type: toLineItemType(li.item_type),
+          quantity: li.quantity ?? 1,
+          unit: li.unit || 'u',
+          unit_price: li.unit_price ?? 0,
+          vat_rate: li.vat_rate ?? 20,
+          discount_percent: li.discount_percent,
+          section: li.section,
+          reference: li.reference,
+        }));
+        const expiryDate = q.expiry_date ?? q.expiryDate;
+        const quoteDate = q.quote_date ?? q.quoteDate;
+        const validityDays = expiryDate
+          ? Math.ceil((new Date(expiryDate).getTime() - new Date(quoteDate ?? Date.now()).getTime()) / (1000 * 60 * 60 * 24))
+          : 30;
         setFormData({
           customer_id: q.customer_id || q.customerId || 0,
           project_id: q.project_id || q.projectId,
@@ -76,7 +146,7 @@ export default function EditQuotePage() {
           notes: q.notes || '',
           terms_and_conditions: q.conditions || q.terms_and_conditions || defaults.conditions,
           conditions: q.conditions || q.terms_and_conditions || defaults.conditions,
-          validity_days: (q.expiry_date || q.expiryDate) ? Math.ceil((new Date(q.expiry_date || q.expiryDate).getTime() - (new Date(q.quote_date || q.quoteDate || Date.now()).getTime())) / (1000 * 60 * 60 * 24)) : 30,
+          validity_days: validityDays,
           deposit_percent: q.deposit_percentage || q.deposit_percent || 0,
           discount_percent: q.global_discount_percent || q.discount_percent || 0,
           cee_premium: q.cee_premium || q.ceePremium || 0,
@@ -87,10 +157,10 @@ export default function EditQuotePage() {
           bank_details: q.bank_details || q.bankDetails || defaults.bankDetails,
           legal_mentions: q.legal_mentions || q.legalMentions || defaults.legalMentions,
           payment_terms: q.payment_terms || q.paymentTerms || defaults.paymentTerms,
-          line_items: lineItems,
+          line_items: normalizedLineItems,
         });
-        setItems(lineItems.map((li: any) => ({
-          item_type: li.item_type || 'supply',
+        setItems(normalizedLineItems.map((li) => ({
+          item_type: li.item_type,
           description: li.description || li.designation || '',
           long_description: li.long_description || '',
           quantity: li.quantity ?? 1,
@@ -117,7 +187,7 @@ export default function EditQuotePage() {
 
   const customerOptions = [
     { value: '', label: 'Sélectionner un client' },
-    ...customers.map(c => ({ value: String(c.id), label: (c as any).name || `${(c as any).firstName || ''} ${(c as any).lastName || ''}`.trim() || `Client #${c.id}` })),
+    ...customers.map(c => ({ value: String(c.id), label: c.name || `${c.firstName || ''} ${c.lastName || ''}`.trim() || `Client #${c.id}` })),
   ];
 
   const projectOptions = [
@@ -126,7 +196,7 @@ export default function EditQuotePage() {
   ];
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
+    const { name, value } = e.target;
     
     if (['customer_id', 'project_id', 'validity_days'].includes(name)) {
       setFormData(prev => ({ ...prev, [name]: value ? parseInt(value) : undefined }));
@@ -155,10 +225,10 @@ export default function EditQuotePage() {
     try {
       const response = await quoteService.update(quoteId, {
         ...formData,
-        line_items: items,
+        line_items: items.map(toQuoteLineItem),
       });
       if (response.success) {
-        router.push(`/quotes/${quoteId}`);
+        router.push(buildDetailPath('quotes', quoteId));
       }
     } catch (error) {
       console.error('Error updating quote:', error);
@@ -218,7 +288,7 @@ export default function EditQuotePage() {
               <Input
                 label="Objet du devis"
                 name="subject"
-                value={(formData as any).subject || ''}
+                value={formData.subject || ''}
                 onChange={handleChange}
                 placeholder="Ex: Rénovation salle de bain..."
               />
@@ -233,7 +303,7 @@ export default function EditQuotePage() {
                 <Input
                   label="Adresse du chantier"
                   name="worksite_address"
-                  value={(formData as any).worksite_address || ''}
+                  value={formData.worksite_address || ''}
                   onChange={handleChange}
                 />
               </div>
@@ -362,7 +432,7 @@ export default function EditQuotePage() {
                   name="footer_notes"
                   rows={2}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={(formData as any).footer_notes || ''}
+                  value={formData.footer_notes || ''}
                   onChange={handleChange}
                   placeholder="Texte affiché en bas du devis PDF"
                 />
@@ -373,7 +443,7 @@ export default function EditQuotePage() {
                   name="bank_details"
                   rows={2}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={(formData as any).bank_details || ''}
+                  value={formData.bank_details || ''}
                   onChange={handleChange}
                   placeholder="IBAN, BIC..."
                 />
@@ -385,7 +455,7 @@ export default function EditQuotePage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => router.push(`/quotes/${quoteId}`)}
+              onClick={() => router.push(buildDetailPath('quotes', quoteId))}
             >
               Annuler
             </Button>

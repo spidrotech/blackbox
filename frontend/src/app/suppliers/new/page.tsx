@@ -3,17 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
-import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Button, Input } from '@/components/ui';
 import { supplierService } from '@/services/api';
 import { SupplierCreate } from '@/types';
-
-const categoryOptions = [
-  { value: 'materials', label: 'Matériaux' },
-  { value: 'tools', label: 'Outils' },
-  { value: 'equipment', label: 'Équipement' },
-  { value: 'services', label: 'Services' },
-  { value: 'other', label: 'Autre' },
-];
 
 export default function NewSupplierPage() {
   const router = useRouter();

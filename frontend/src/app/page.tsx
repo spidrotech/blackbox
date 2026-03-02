@@ -225,7 +225,7 @@ export default function Home() {
                 Se connecter
               </Link>
               <Link href="/register" className="text-gray-400 hover:text-white transition-colors">
-                S'inscrire
+                S&apos;inscrire
               </Link>
               <Link href="/contact" className="text-gray-400 hover:text-white transition-colors">
                 Contact

@@ -5,20 +5,32 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { MainLayout } from '@/components/layout';
 import { quoteService } from '@/services/api';
-import { Quote } from '@/types';
+import { LineItem, Quote } from '@/types';
 import { formatDate, formatCurrency } from '@/lib/utils';
+import { buildDetailPath, buildEditPath } from '@/lib/routes';
+
+type QuoteView = Quote & {
+  sent_at?: string;
+  sentAt?: string;
+  finalized_date?: string;
+  global_discount?: number;
+  customer?: Quote['customer'] & {
+    phone_number?: string;
+    address_line1?: string;
+  };
+};
 
 const BADGE: Record<string, { label: string; cls: string }> = {
   draft:     { label: 'Brouillon', cls: 'bg-gray-100 text-gray-600' },
-  sent:      { label: 'Envoy\u00e9',    cls: 'bg-blue-100 text-blue-700' },
-  viewed:    { label: 'Consult\u00e9',  cls: 'bg-purple-100 text-purple-700' },
-  signed:    { label: 'Sign\u00e9',     cls: 'bg-green-100 text-green-700' },
-  accepted:  { label: 'Accept\u00e9',   cls: 'bg-green-100 text-green-700' },
-  refused:   { label: 'Refus\u00e9',    cls: 'bg-red-100 text-red-700' },
-  rejected:  { label: 'Refus\u00e9',    cls: 'bg-red-100 text-red-700' },
-  finalized: { label: 'Finalis\u00e9',  cls: 'bg-emerald-100 text-emerald-700' },
-  expired:   { label: 'Expir\u00e9',    cls: 'bg-orange-100 text-orange-600' },
-  cancelled: { label: 'Annul\u00e9',    cls: 'bg-gray-100 text-gray-400' },
+  sent:      { label: 'Envoyé',    cls: 'bg-blue-100 text-blue-700' },
+  viewed:    { label: 'Consulté',  cls: 'bg-purple-100 text-purple-700' },
+  signed:    { label: 'Signé',     cls: 'bg-green-100 text-green-700' },
+  accepted:  { label: 'Accepté',   cls: 'bg-green-100 text-green-700' },
+  refused:   { label: 'Refusé',    cls: 'bg-red-100 text-red-700' },
+  rejected:  { label: 'Refusé',    cls: 'bg-red-100 text-red-700' },
+  finalized: { label: 'Finalisé',  cls: 'bg-emerald-100 text-emerald-700' },
+  expired:   { label: 'Expiré',    cls: 'bg-orange-100 text-orange-600' },
+  cancelled: { label: 'Annulé',    cls: 'bg-gray-100 text-gray-400' },
 };
 
 const WORKFLOW = ['draft', 'sent', 'viewed', 'signed', 'accepted', 'finalized'];
@@ -26,8 +38,8 @@ const WORKFLOW = ['draft', 'sent', 'viewed', 'signed', 'accepted', 'finalized'];
 function StatusStepper({ status }: { status: string }) {
   const currentIdx = WORKFLOW.indexOf(status);
   const labels: Record<string, string> = {
-    draft: 'Brouillon', sent: 'Envoy\u00e9', viewed: 'Consult\u00e9',
-    signed: 'Sign\u00e9', accepted: 'Accept\u00e9', finalized: 'Finalis\u00e9',
+    draft: 'Brouillon', sent: 'Envoyé', viewed: 'Consulté',
+    signed: 'Signé', accepted: 'Accepté', finalized: 'Finalisé',
   };
   if (!WORKFLOW.includes(status)) return null;
   return (
@@ -83,7 +95,7 @@ export default function QuoteDetailPage() {
   const loadQuote = useCallback(async () => {
     try {
       const res = await quoteService.getById(quoteId);
-      const quoteData = (res as any).quote ?? res.data;
+      const quoteData = (res as unknown as { quote?: QuoteView }).quote ?? (res.data as QuoteView | undefined);
       if (res.success && quoteData) {
         setQuote(quoteData);
         try {
@@ -101,7 +113,7 @@ export default function QuoteDetailPage() {
     setActionLoading('send');
     try {
       const res = await quoteService.send(quoteId);
-      if (res.success) { showToast('Devis marqu\u00e9 comme envoy\u00e9'); loadQuote(); }
+      if (res.success) { showToast('Devis marqué comme envoyé'); loadQuote(); }
       else showToast('Erreur', 'error');
     } catch { showToast('Erreur', 'error'); }
     finally { setActionLoading(null); }
@@ -111,9 +123,10 @@ export default function QuoteDetailPage() {
     setActionLoading('dup');
     try {
       const res = await quoteService.duplicate(quoteId);
-      if (res.success && (res as any).quote) {
-        showToast('Dupliqu\u00e9 avec succ\u00e8s');
-        setTimeout(() => router.push(`/quotes/${(res as any).quote.id}/edit`), 800);
+      const duplicatedQuote = (res as unknown as { quote?: Quote }).quote ?? (res.data as Quote | undefined);
+      if (res.success && duplicatedQuote?.id) {
+        showToast('Dupliqué avec succès');
+        setTimeout(() => router.push(buildEditPath('quotes', duplicatedQuote.id)), 800);
       } else showToast('Erreur', 'error');
     } catch { showToast('Erreur', 'error'); }
     finally { setActionLoading(null); }
@@ -125,20 +138,23 @@ export default function QuoteDetailPage() {
     try {
       const res = await quoteService.convertToInvoice(quoteId);
       if (res.success) {
-        showToast('Facture cr\u00e9\u00e9e !');
-        const inv = (res as any).invoice || res.data;
-        if (inv?.id) setTimeout(() => router.push(`/invoices/${inv.id}`), 800);
+        showToast('Facture créée !');
+        const inv = (res as unknown as { invoice?: { id?: number } }).invoice ?? (res.data as { id?: number } | undefined);
+        const createdInvoiceId = inv?.id;
+        if (typeof createdInvoiceId === 'number') {
+          setTimeout(() => router.push(buildDetailPath('invoices', createdInvoiceId)), 800);
+        }
       } else showToast('Erreur', 'error');
     } catch { showToast('Erreur', 'error'); }
     finally { setActionLoading(null); }
   };
 
   const handleDelete = async () => {
-    if (!confirm('Supprimer ce devis d\u00e9finitivement ?')) return;
+    if (!confirm('Supprimer ce devis définitivement ?')) return;
     setActionLoading('del');
     try {
       const res = await quoteService.delete(quoteId);
-      if (res.success) { showToast('Supprim\u00e9'); setTimeout(() => router.push('/quotes'), 600); }
+      if (res.success) { showToast('Supprimé'); setTimeout(() => router.push('/quotes'), 600); }
       else showToast('Erreur', 'error');
     } catch { showToast('Erreur', 'error'); }
     finally { setActionLoading(null); }
@@ -149,7 +165,7 @@ export default function QuoteDetailPage() {
     setActionLoading('status');
     try {
       const res = await quoteService.updateStatus(quoteId, newStatus);
-      if (res.success) { showToast('Statut mis \u00e0 jour'); loadQuote(); }
+      if (res.success) { showToast('Statut mis à jour'); loadQuote(); }
       else showToast('Erreur', 'error');
     } catch { showToast('Erreur', 'error'); }
     finally { setActionLoading(null); }
@@ -183,12 +199,12 @@ export default function QuoteDetailPage() {
     );
   }
 
-  const q = quote as any;
+  const q = quote as QuoteView;
   const b = BADGE[quote.status] ?? { label: quote.status, cls: 'bg-gray-100 text-gray-600' };
-  const customerName = q.customer ? (q.customer.company_name || q.customer.name || `${q.customer.first_name || ''} ${q.customer.last_name || ''}`.trim()) : '-';
+  const customerName = q.customer ? (q.customer.name || `${q.customer.firstName || ''} ${q.customer.lastName || ''}`.trim()) : '-';
   const customerEmail = q.customer?.email || '-';
-  const customerPhone = q.customer?.phone || q.customer?.phone_number || '';
-  const customerAddress = q.customer?.address?.street || q.customer?.address_line1 || '';
+  const customerPhone = q.customer?.phone || q.customer?.phone_number || q.customer?.mobile || '';
+  const customerAddress = q.customer?.address?.street || q.customer?.billingAddress?.street || q.customer?.address_line1 || '';
   const totalHt = q.total_ht ?? 0;
   const totalTtc = q.total_ttc ?? 0;
   const totalTva = q.total_tva ?? (totalTtc - totalHt);
@@ -199,11 +215,11 @@ export default function QuoteDetailPage() {
   const depositPct = q.deposit_percent ?? 0;
   const depositAmt = q.deposit_amount ?? (totalTtc * depositPct / 100);
   const canConvert = ['signed', 'accepted', 'finalized'].includes(quote.status);
-  const lineItems: any[] = q.line_items || [];
+  const lineItems: LineItem[] = q.line_items || [];
 
   // Group line items by section
-  const sections: Record<string, any[]> = {};
-  lineItems.forEach((item: any) => {
+  const sections: Record<string, LineItem[]> = {};
+  lineItems.forEach((item) => {
     const sec = item.section || 'G\u00e9n\u00e9ral';
     if (!sections[sec]) sections[sec] = [];
     sections[sec].push(item);
@@ -211,14 +227,14 @@ export default function QuoteDetailPage() {
 
   const STATUS_OPTIONS = [
     { value: 'draft', label: 'Brouillon' },
-    { value: 'sent', label: 'Envoy\u00e9' },
-    { value: 'viewed', label: 'Consult\u00e9' },
-    { value: 'signed', label: 'Sign\u00e9' },
-    { value: 'accepted', label: 'Accept\u00e9' },
-    { value: 'rejected', label: 'Refus\u00e9' },
-    { value: 'finalized', label: 'Finalis\u00e9' },
-    { value: 'expired', label: 'Expir\u00e9' },
-    { value: 'cancelled', label: 'Annul\u00e9' },
+    { value: 'sent', label: 'Envoyé' },
+    { value: 'viewed', label: 'Consulté' },
+    { value: 'signed', label: 'Signé' },
+    { value: 'accepted', label: 'Accepté' },
+    { value: 'rejected', label: 'Refusé' },
+    { value: 'finalized', label: 'Finalisé' },
+    { value: 'expired', label: 'Expiré' },
+    { value: 'cancelled', label: 'Annulé' },
   ].filter(s => s.value !== quote.status);
 
   return (
@@ -256,10 +272,10 @@ export default function QuoteDetailPage() {
           {canConvert && (
             <button onClick={handleConvert} disabled={actionLoading === 'convert'} className="inline-flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-3.5 py-2 rounded-lg transition-colors">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-              Cr\u00e9er la facture
+              Créer la facture
             </button>
           )}
-          <Link href={`/quotes/${quoteId}/edit`} className="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium px-3.5 py-2 rounded-lg transition-colors">
+          <Link href={buildEditPath('quotes', quoteId)} className="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium px-3.5 py-2 rounded-lg transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
             Modifier
           </Link>
@@ -316,8 +332,8 @@ export default function QuoteDetailPage() {
                 </div>
                 {(q.expiry_date || q.expiryDate) && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Validit\u00e9</span>
-                    <span className="text-gray-900">{formatDate(q.expiry_date || q.expiryDate)}</span>
+                    <span className="text-gray-500">Validité</span>
+                    <span className="text-gray-900">{formatDate(q.expiry_date || q.expiryDate || '')}</span>
                   </div>
                 )}
                 {(q.worksite_address || q.worksiteAddress) && (
@@ -328,14 +344,14 @@ export default function QuoteDetailPage() {
                 )}
                 {(q.sent_at || q.sentAt) && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Envoy\u00e9 le</span>
-                    <span className="text-gray-900">{formatDate(q.sent_at || q.sentAt)}</span>
+                    <span className="text-gray-500">Envoyé le</span>
+                    <span className="text-gray-900">{formatDate(q.sent_at || q.sentAt || '')}</span>
                   </div>
                 )}
                 {(q.finalized_date || q.finalizedDate) && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Finalis\u00e9 le</span>
-                    <span className="text-gray-900">{formatDate(q.finalized_date || q.finalizedDate)}</span>
+                    <span className="text-gray-500">Finalisé le</span>
+                    <span className="text-gray-900">{formatDate(q.finalized_date || q.finalizedDate || '')}</span>
                   </div>
                 )}
               </div>
@@ -345,7 +361,7 @@ export default function QuoteDetailPage() {
           {/* Line Items */}
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-50">
-              <h2 className="text-sm font-semibold text-gray-700">D\u00e9tail des prestations</h2>
+              <h2 className="text-sm font-semibold text-gray-700">Détail des prestations</h2>
             </div>
             {Object.keys(sections).length === 0 ? (
               <p className="px-5 py-8 text-sm text-gray-400 text-center">Aucune ligne</p>
@@ -361,9 +377,9 @@ export default function QuoteDetailPage() {
                     <table className="w-full">
                       <thead>
                         <tr className="border-b border-gray-50">
-                          <th className="px-5 py-2.5 text-left text-xs text-gray-400 font-medium">D\u00e9signation</th>
+                          <th className="px-5 py-2.5 text-left text-xs text-gray-400 font-medium">Désignation</th>
                           <th className="px-3 py-2.5 text-center text-xs text-gray-400 font-medium">Qte</th>
-                          <th className="px-3 py-2.5 text-center text-xs text-gray-400 font-medium">Unit\u00e9</th>
+                          <th className="px-3 py-2.5 text-center text-xs text-gray-400 font-medium">Unité</th>
                           <th className="px-3 py-2.5 text-right text-xs text-gray-400 font-medium">P.U. HT</th>
                           <th className="px-3 py-2.5 text-right text-xs text-gray-400 font-medium">Remise</th>
                           <th className="px-3 py-2.5 text-right text-xs text-gray-400 font-medium">TVA</th>
@@ -371,7 +387,7 @@ export default function QuoteDetailPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                        {items.map((item: any) => {
+                        {items.map((item) => {
                           const qty = item.quantity ?? 1;
                           const pu = item.unit_price ?? 0;
                           const disc = item.discount_percent ?? 0;
@@ -379,7 +395,7 @@ export default function QuoteDetailPage() {
                           return (
                             <tr key={item.id} className="hover:bg-gray-50/50">
                               <td className="px-5 py-3">
-                                <div className="text-sm text-gray-900">{item.description || item.title}</div>
+                                <div className="text-sm text-gray-900">{item.description || item.designation}</div>
                                 {(item.long_description) && (
                                   <div className="text-xs text-gray-400 mt-0.5">{item.long_description}</div>
                                 )}
@@ -422,7 +438,7 @@ export default function QuoteDetailPage() {
         <div className="col-span-1 space-y-4">
           {/* Financial Summary */}
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">R\u00e9capitulatif</h3>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Récapitulatif</h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-500">Total HT</span>
@@ -450,7 +466,7 @@ export default function QuoteDetailPage() {
               )}
               {mprPremium > 0 && (
                 <div className="flex justify-between text-green-600">
-                  <span>MaPrimeR\u00e9nov'</span>
+                  <span>MaPrimeRénov&apos;</span>
                   <span>-{formatCurrency(mprPremium)}</span>
                 </div>
               )}
@@ -484,8 +500,8 @@ export default function QuoteDetailPage() {
           {pdfUrl && (
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="px-4 py-2.5 border-b border-gray-50 flex items-center justify-between">
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Aper\u00e7u PDF</span>
-                <button onClick={handleDownloadPdf} className="text-xs text-blue-600 hover:underline">T\u00e9l\u00e9charger</button>
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Aperçu PDF</span>
+                <button onClick={handleDownloadPdf} className="text-xs text-blue-600 hover:underline">Télécharger</button>
               </div>
               <iframe
                 src={pdfUrl}

@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
-import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '@/components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Button } from '@/components/ui';
 import { priceLibraryService } from '@/services/api';
 import { PriceLibraryItem } from '@/types';
+import { buildEditPath } from '@/lib/routes';
 
 const typeLabels: Record<string, string> = {
   supply: 'Fourniture',
@@ -42,6 +43,7 @@ export default function PriceLibraryDetailPage() {
 
   useEffect(() => {
     loadItem();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId]);
 
   const loadItem = async () => {
@@ -114,7 +116,7 @@ export default function PriceLibraryDetailPage() {
           </div>
           <div className="flex gap-2">
             <Button
-              onClick={() => router.push(`/price-library/${itemId}/edit`)}
+              onClick={() => router.push(buildEditPath('price-library', itemId))}
               variant="primary"
             >
               Modifier
@@ -209,7 +211,7 @@ export default function PriceLibraryDetailPage() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-gray-500">Date d'ajout</label>
+                <label className="text-sm text-gray-500">Date d&apos;ajout</label>
                 <p className="font-medium">
                   {new Date(item.created_at || '').toLocaleDateString('fr-FR')}
                 </p>

@@ -6,7 +6,8 @@ import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Input, Select } from '@/components/ui';
 import { priceLibraryService } from '@/services/api';
 import { PriceLibraryItem } from '@/types';
-import { formatCurrency, getStatusLabel } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
+import { buildEditPath } from '@/lib/routes';
 
 const typeOptions = [
   { value: '', label: 'Tous les types' },
@@ -236,7 +237,7 @@ export default function PriceLibraryPage() {
                           Dupliquer
                         </button>
                         <Link
-                          href={`/price-library/${item.id}/edit`}
+                          href={buildEditPath('price-library', item.id)}
                           className="text-gray-600 hover:text-gray-900 mr-4"
                         >
                           Modifier

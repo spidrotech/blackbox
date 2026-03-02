@@ -12,10 +12,6 @@ from app.core.security import get_current_user_required
 router = APIRouter()
 
 
-def _line_total(items: list) -> float:
-    return round(sum(float(item.total_ttc) for item in items), 2)
-
-
 @router.get("/", response_model=dict)
 def get_dashboard(
     current_user: User = Depends(get_current_user_required),

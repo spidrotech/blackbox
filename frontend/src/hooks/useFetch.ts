@@ -16,7 +16,7 @@ export interface ApiResponse<T> {
 
 export function useFetch<T>(
   fetchFn: () => Promise<ApiResponse<T> | ApiResponse<T[]>>,
-  dependencies: any[] = []
+  dependencies: React.DependencyList = []
 ) {
   const [state, setState] = useState<UseFetchState<T>>({
     data: null,
@@ -64,9 +64,13 @@ export function useFetch<T>(
     }
   }, [fetchFn]);
 
+  const dependencyKey = JSON.stringify(dependencies);
+
   useEffect(() => {
-    refetch();
-  }, dependencies);
+    queueMicrotask(() => {
+      void refetch();
+    });
+  }, [refetch, dependencyKey]);
 
   return { ...state, refetch };
 }

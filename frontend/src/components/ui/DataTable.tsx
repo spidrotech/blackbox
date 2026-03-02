@@ -3,11 +3,11 @@
 interface TableColumn<T> {
   key: keyof T;
   label: string;
-  render?: (value: any, row: T) => React.ReactNode;
+  render?: (value: unknown, row: T) => React.ReactNode;
   width?: string;
 }
 
-export interface DataTableProps<T extends Record<string, any>> {
+export interface DataTableProps<T extends Record<string, unknown>> {
   columns: TableColumn<T>[];
   data: T[];
   loading?: boolean;
@@ -15,7 +15,7 @@ export interface DataTableProps<T extends Record<string, any>> {
   onRowClick?: (row: T) => void;
 }
 
-export function DataTable<T extends Record<string, any>>({
+export function DataTable<T extends Record<string, unknown>>({
   columns,
   data,
   loading,

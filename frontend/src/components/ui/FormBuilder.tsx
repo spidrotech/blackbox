@@ -18,7 +18,7 @@ export interface FormConfig<T> {
   }>;
 }
 
-export interface FormBuilderProps<T extends Record<string, any>> {
+export interface FormBuilderProps<T extends Record<string, unknown>> {
   title: string;
   config: FormConfig<T>;
   data: T;
@@ -30,7 +30,7 @@ export interface FormBuilderProps<T extends Record<string, any>> {
   submitText?: string;
 }
 
-export function FormBuilder<T extends Record<string, any>>({
+export function FormBuilder<T extends Record<string, unknown>>({
   title,
   config,
   data,
@@ -49,24 +49,34 @@ export function FormBuilder<T extends Record<string, any>>({
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-6">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            {config.fields.map((field) => (
-              <div key={String(field.name)} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
-                <FormField
-                  label={field.label}
-                  name={String(field.name)}
-                  type={field.type || 'text'}
-                  value={data[field.name as keyof T] || ''}
-                  onChange={onChange}
-                  error={errors[field.name]}
-                  touched={touched[field.name]}
-                  placeholder={field.placeholder}
-                  options={field.options}
-                  required={field.required}
-                  hint={field.hint}
-                  rows={field.rows}
-                />
-              </div>
-            ))}
+            {config.fields.map((field) => {
+              const rawValue = data[field.name as keyof T];
+              const normalizedValue: string | number | readonly string[] | undefined =
+                typeof rawValue === 'string' || typeof rawValue === 'number'
+                  ? rawValue
+                  : Array.isArray(rawValue)
+                    ? rawValue.map((value) => String(value))
+                    : '';
+
+              return (
+                <div key={String(field.name)} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
+                  <FormField
+                    label={field.label}
+                    name={String(field.name)}
+                    type={field.type || 'text'}
+                    value={normalizedValue}
+                    onChange={onChange}
+                    error={errors[field.name]}
+                    touched={touched[field.name]}
+                    placeholder={field.placeholder}
+                    options={field.options}
+                    required={field.required}
+                    hint={field.hint}
+                    rows={field.rows}
+                  />
+                </div>
+              );
+            })}
           </div>
 
           <div className="flex gap-3 pt-6 border-t">

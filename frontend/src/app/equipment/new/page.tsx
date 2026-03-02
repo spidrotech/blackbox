@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
-import { equipmentService, projectService } from '@/services/api';
-import { EquipmentCreate, Project } from '@/types';
+import { equipmentService } from '@/services/api';
+import { EquipmentCreate } from '@/types';
 
 const statusOptions = [
   { value: 'available', label: 'Disponible' },
@@ -27,7 +27,6 @@ const categoryOptions = [
 export default function NewEquipmentPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [projects, setProjects] = useState<Project[]>([]);
   
   const [formData, setFormData] = useState<EquipmentCreate>({
     name: '',
@@ -38,26 +37,6 @@ export default function NewEquipmentPage() {
     status: 'available',
     notes: '',
   });
-
-  useEffect(() => {
-    loadProjects();
-  }, []);
-
-  const loadProjects = async () => {
-    try {
-      const response = await projectService.getAll();
-      if (response.success && response.data) {
-        setProjects(Array.isArray(response.data) ? response.data : []);
-      }
-    } catch (error) {
-      console.error('Error loading projects:', error);
-    }
-  };
-
-  const projectOptions = [
-    { value: '', label: 'Aucun (disponible)' },
-    ...projects.map(p => ({ value: String(p.id), label: p.name })),
-  ];
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;

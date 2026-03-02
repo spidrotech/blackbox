@@ -21,6 +21,22 @@ interface Props {
   className?: string;
 }
 
+interface AddressApiFeature {
+  properties?: {
+    label?: string;
+    name?: string;
+    city?: string;
+    postcode?: string;
+  };
+  geometry?: {
+    coordinates?: [number, number];
+  };
+}
+
+interface AddressApiResponse {
+  features?: AddressApiFeature[];
+}
+
 export function AddressAutocomplete({ value, onChange, onSelect, placeholder = 'Rechercher une adresse...', label, className }: Props) {
   const [suggestions, setSuggestions] = useState<AddressResult[]>([]);
   const [open, setOpen] = useState(false);
@@ -38,12 +54,12 @@ export function AddressAutocomplete({ value, onChange, onSelect, placeholder = '
         `https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&limit=6&type=housenumber&type=street`,
       );
       if (!res.ok) return;
-      const data = await res.json();
-      const results: AddressResult[] = (data.features || []).map((f: any) => ({
-        label: f.properties.label,
-        street: f.properties.name,
-        city: f.properties.city,
-        postalCode: f.properties.postcode,
+      const data = (await res.json()) as AddressApiResponse;
+      const results: AddressResult[] = (data.features || []).map((f) => ({
+        label: f.properties?.label || '',
+        street: f.properties?.name || '',
+        city: f.properties?.city || '',
+        postalCode: f.properties?.postcode || '',
         country: 'France',
         lat: f.geometry?.coordinates?.[1],
         lon: f.geometry?.coordinates?.[0],

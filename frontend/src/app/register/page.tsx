@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { authService } from '@/services/api';
-import { Button, Input, Card, CardHeader, CardTitle, CardContent, Select } from '@/components/ui';
+import { Button, Input, Card, CardHeader, CardTitle, CardContent } from '@/components/ui';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -55,7 +55,7 @@ export default function RegisterPage() {
       } else {
         setError(response.error || 'Erreur lors de l\'inscription');
       }
-    } catch (err) {
+    } catch {
       setError('Erreur lors de l\'inscription');
     } finally {
       setLoading(false);

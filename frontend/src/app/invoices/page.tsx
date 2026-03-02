@@ -6,6 +6,7 @@ import { MainLayout } from '@/components/layout';
 import { invoiceService, customerService } from '@/services/api';
 import { Invoice, Customer } from '@/types';
 import { formatDate, formatCurrency } from '@/lib/utils';
+import { buildDetailPath, buildEditPath } from '@/lib/routes';
 
 /* ─── Constants ─────────────────────────────────────────────── */
 
@@ -29,11 +30,18 @@ const TABS = [
 
 const MONTH_FR = ['Jan','Fév','Mar','Avr','Mai','Jui','Jul','Aoû','Sep','Oct','Nov','Déc'];
 
+type InvoiceListItemLike = Invoice & {
+  total_ttc?: number;
+  amount_paid?: number;
+  due_date?: string;
+  customerId?: number;
+};
+
 /* ─── Helpers ────────────────────────────────────────────────── */
 
 function calcTotal(invoice: Invoice): number {
   if (invoice.totalTtc !== undefined) return invoice.totalTtc;
-  if ((invoice as any).total_ttc !== undefined) return (invoice as any).total_ttc;
+  if ((invoice as InvoiceListItemLike).total_ttc !== undefined) return (invoice as InvoiceListItemLike).total_ttc ?? 0;
   if (invoice.total !== undefined) return invoice.total;
   if (!invoice.line_items?.length) return 0;
   return invoice.line_items.reduce((sum, item) => {
@@ -42,6 +50,22 @@ function calcTotal(invoice: Invoice): number {
     const ht = sub - disc;
     return sum + ht + (ht * (item.vat_rate ?? 20)) / 100;
   }, 0);
+}
+
+function getInvoiceDate(inv: InvoiceListItemLike): string | undefined {
+  return inv.invoice_date ?? inv.invoiceDate;
+}
+
+function getInvoiceDueDate(inv: InvoiceListItemLike): string | undefined {
+  return inv.due_date ?? inv.dueDate;
+}
+
+function getInvoiceAmountPaid(inv: InvoiceListItemLike): number {
+  return inv.amountPaid ?? inv.amount_paid ?? 0;
+}
+
+function getInvoiceCustomerId(inv: InvoiceListItemLike): number | undefined {
+  return inv.customer_id ?? inv.customerId;
 }
 
 function customerLabel(id: number | undefined, customers: Customer[]): string {
@@ -87,7 +111,7 @@ function RevenueChart({ invoices }: { invoices: Invoice[] }) {
       buckets.push({ label: MONTH_FR[d.getMonth()], paid: 0, pending: 0 });
     }
     invoices.forEach(inv => {
-      const dateStr = (inv as any).invoice_date ?? (inv as any).invoiceDate;
+      const dateStr = getInvoiceDate(inv as InvoiceListItemLike);
       if (!dateStr) return;
       const d = new Date(dateStr);
       const monthsAgo = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
@@ -192,7 +216,7 @@ export default function InvoicesPage() {
     let totalTtc = 0, collected = 0, pending = 0, overdueAmt = 0, overdueCount = 0;
     invoices.forEach(inv => {
       const ttc = calcTotal(inv);
-      const paid = inv.amountPaid ?? (inv as any).amount_paid ?? 0;
+      const paid = getInvoiceAmountPaid(inv as InvoiceListItemLike);
       const remaining = inv.remainingAmount ?? (ttc - paid);
       totalTtc += ttc;
       collected += paid;
@@ -220,10 +244,10 @@ export default function InvoicesPage() {
     invoices.forEach(inv => {
       if (!['sent', 'partial', 'overdue'].includes(inv.status)) return;
       const total = calcTotal(inv);
-      const paid = inv.amountPaid ?? (inv as any).amount_paid ?? 0;
+      const paid = getInvoiceAmountPaid(inv as InvoiceListItemLike);
       const remaining = Math.max(inv.remainingAmount ?? (total - paid), 0);
       if (remaining <= 0) return;
-      const dueStr = (inv as any).due_date ?? (inv as any).dueDate;
+      const dueStr = getInvoiceDueDate(inv as InvoiceListItemLike);
       if (!dueStr) {
         buckets.current += remaining;
         return;
@@ -246,7 +270,7 @@ export default function InvoicesPage() {
       const matchSearch = q === '' ||
         inv.reference.toLowerCase().includes(q) ||
         (inv.subject ?? '').toLowerCase().includes(q) ||
-        customerLabel(inv.customer_id ?? (inv as any).customerId, customers).toLowerCase().includes(q);
+        customerLabel(getInvoiceCustomerId(inv as InvoiceListItemLike), customers).toLowerCase().includes(q);
       return matchTab && matchSearch;
     });
   }, [invoices, customers, tab, search]);
@@ -416,17 +440,19 @@ export default function InvoicesPage() {
                 <tbody className="divide-y divide-gray-50">
                   {filtered.map(invoice => {
                     const total = calcTotal(invoice);
-                    const paid = invoice.amountPaid ?? (invoice as any).amount_paid ?? 0;
+                    const paid = getInvoiceAmountPaid(invoice as InvoiceListItemLike);
                     const remaining = invoice.remainingAmount ?? (total - paid);
                     const b = BADGE[invoice.status] ?? BADGE.draft;
-                    const custId = invoice.customer_id ?? (invoice as any).customerId;
+                    const custId = getInvoiceCustomerId(invoice as InvoiceListItemLike);
                     const isOverdue = invoice.status === 'overdue';
+                    const invoiceDate = getInvoiceDate(invoice as InvoiceListItemLike);
+                    const dueDate = getInvoiceDueDate(invoice as InvoiceListItemLike);
 
                     return (
                       <tr key={invoice.id} className={`group hover:bg-blue-50/30 transition-colors ${isOverdue ? 'bg-red-50/20' : ''}`}>
                         {/* Référence */}
                         <td className="px-5 py-4">
-                          <Link href={`/invoices/${invoice.id}`} className="text-sm font-semibold text-gray-900 hover:text-blue-600 transition-colors">
+                          <Link href={buildDetailPath('invoices', invoice.id)} className="text-sm font-semibold text-gray-900 hover:text-blue-600 transition-colors">
                             {invoice.reference}
                           </Link>
                           {invoice.subject && (
@@ -447,13 +473,13 @@ export default function InvoicesPage() {
                         {/* Dates */}
                         <td className="px-5 py-4">
                           <div className="text-sm text-gray-600">
-                            {(invoice as any).invoice_date ?? (invoice as any).invoiceDate
-                              ? formatDate(((invoice as any).invoice_date ?? (invoice as any).invoiceDate)!)
+                            {invoiceDate
+                              ? formatDate(invoiceDate)
                               : '—'}
                           </div>
-                          {((invoice as any).due_date ?? (invoice as any).dueDate) && (
+                          {dueDate && (
                             <div className={`text-xs mt-0.5 ${isOverdue ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
-                              Éch. {formatDate(((invoice as any).due_date ?? (invoice as any).dueDate)!)}
+                              Éch. {formatDate(dueDate)}
                             </div>
                           )}
                         </td>
@@ -477,13 +503,13 @@ export default function InvoicesPage() {
                         {/* Actions */}
                         <td className="px-5 py-4 text-right">
                           <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Link href={`/invoices/${invoice.id}`}
+                            <Link href={buildDetailPath('invoices', invoice.id)}
                               className="px-2.5 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
                               Voir
                             </Link>
                             {invoice.status === 'draft' && (
                               <>
-                                <Link href={`/invoices/${invoice.id}/edit`}
+                                <Link href={buildEditPath('invoices', invoice.id)}
                                   className="px-2.5 py-1 text-xs font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
                                   Modifier
                                 </Link>
@@ -494,7 +520,7 @@ export default function InvoicesPage() {
                               </>
                             )}
                             {['sent', 'partial', 'overdue'].includes(invoice.status) && (
-                              <Link href={`/invoices/${invoice.id}`}
+                              <Link href={buildDetailPath('invoices', invoice.id)}
                                 className="px-2.5 py-1 text-xs font-medium text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors">
                                 Encaisser
                               </Link>

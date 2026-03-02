@@ -5,7 +5,7 @@ import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, DataTable } from '@/components/ui';
 import { ReactNode } from 'react';
 
-export interface PageListProps<T extends Record<string, any>> {
+export interface PageListProps<T extends Record<string, unknown>> {
   title: string;
   createLink: string;
   createLabel?: string;
@@ -15,7 +15,7 @@ export interface PageListProps<T extends Record<string, any>> {
   columns: Array<{
     key: keyof T;
     label: string;
-    render?: (value: any, row: T) => React.ReactNode;
+    render?: (value: unknown, row: T) => React.ReactNode;
     width?: string;
   }>;
   onRowClick?: (row: T) => void;
@@ -23,7 +23,7 @@ export interface PageListProps<T extends Record<string, any>> {
   emptyMessage?: string;
 }
 
-export function PageList<T extends Record<string, any>>({
+export function PageList<T extends Record<string, unknown>>({
   title,
   createLink,
   createLabel = 'Nouveau',

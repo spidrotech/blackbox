@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
-import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '@/components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Button } from '@/components/ui';
 import { customerService } from '@/services/api';
 import { Customer } from '@/types';
+import { buildEditPath } from '@/lib/routes';
 
 export default function CustomerDetailPage() {
   const router = useRouter();
@@ -18,6 +19,7 @@ export default function CustomerDetailPage() {
 
   useEffect(() => {
     loadCustomer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId]);
 
   const loadCustomer = async () => {
@@ -85,7 +87,7 @@ export default function CustomerDetailPage() {
           </div>
           <div className="flex gap-2">
             <Button
-              onClick={() => router.push(`/customers/${customerId}/edit`)}
+              onClick={() => router.push(buildEditPath('customers', customerId))}
               variant="primary"
             >
               Modifier
@@ -167,10 +169,10 @@ export default function CustomerDetailPage() {
                     </div>
                   )}
                   <div className="grid grid-cols-2 gap-4">
-                    {customer.address.postalCode && (
+                    {customer.address.postal_code && (
                       <div>
                         <label className="text-sm text-gray-500">Code postal</label>
-                        <p className="font-medium">{customer.address.postalCode}</p>
+                        <p className="font-medium">{customer.address.postal_code}</p>
                       </div>
                     )}
                     {customer.address.city && (
@@ -212,7 +214,7 @@ export default function CustomerDetailPage() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-gray-500">Date d'ajout</label>
+                <label className="text-sm text-gray-500">Date d&apos;ajout</label>
                 <p className="font-medium">
                   {new Date(customer.createdAt || '').toLocaleDateString('fr-FR')}
                 </p>

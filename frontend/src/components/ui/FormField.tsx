@@ -7,7 +7,7 @@ export interface FormFieldProps {
   label: string;
   name: string;
   type?: 'text' | 'email' | 'password' | 'number' | 'tel' | 'date' | 'textarea' | 'select';
-  value: any;
+  value: string | number | readonly string[] | undefined;
   onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void;
   error?: string;
   touched?: boolean;

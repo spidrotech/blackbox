@@ -276,7 +276,7 @@ export interface QuoteCreate {
   footer_notes?: string;
   bank_details?: string;
   legal_mentions?: string;
-  line_items?: any[];
+  line_items?: LineItem[];
 }
 
 export interface QuoteStats {
@@ -348,7 +348,7 @@ export interface Invoice {
   quoteId?: number;
   companyId?: number;
   lineItems?: LineItem[];
-  company?: any;
+  company?: Company;
 }
 
 export interface InvoiceCreate {
@@ -368,7 +368,7 @@ export interface InvoiceCreate {
   invoice_type?: string;
   payment_terms_days?: number;
   discount_percent?: number;
-  line_items?: any[];
+  line_items?: LineItem[];
 }
 
 export interface Supplier {
@@ -572,6 +572,10 @@ export interface PriceLibraryItemCreate {
 
 // Dashboard types
 export interface DashboardData {
+  ca_mois?: number;
+  ca_total?: number;
+  reste_a_encaisser?: number;
+  overdue_count?: number;
   projects: {
     total: number;
     active: number;
@@ -592,6 +596,14 @@ export interface DashboardData {
   revenue: {
     total: number;
   };
+  monthlyAnalytics?: Array<{
+    key: string;
+    label: string;
+    paidRevenue: number;
+    pendingInvoices: number;
+    quotesCreated: number;
+    quotesAccepted: number;
+  }>;
   recentProjects: Array<{
     id: number;
     name: string;

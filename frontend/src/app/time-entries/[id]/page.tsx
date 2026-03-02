@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
-import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '@/components/ui';
+import { Card, CardContent, CardHeader, CardTitle, Button } from '@/components/ui';
 import { timeEntryService } from '@/services/api';
 import { TimeEntry } from '@/types';
+import { buildDetailPath, buildEditPath } from '@/lib/routes';
 
 export default function TimeEntryDetailPage() {
   const router = useRouter();
@@ -18,6 +19,7 @@ export default function TimeEntryDetailPage() {
 
   useEffect(() => {
     loadTimeEntry();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeEntryId]);
 
   const loadTimeEntry = async () => {
@@ -89,7 +91,7 @@ export default function TimeEntryDetailPage() {
           </div>
           <div className="flex gap-2">
             <Button
-              onClick={() => router.push(`/time-entries/${timeEntryId}/edit`)}
+              onClick={() => router.push(buildEditPath('time-entries', timeEntryId))}
               variant="primary"
             >
               Modifier
@@ -115,7 +117,7 @@ export default function TimeEntryDetailPage() {
                   <label className="text-sm text-gray-500">Projet</label>
                   <p className="font-medium">
                     <a
-                      href={`/projects/${timeEntry.project_id}`}
+                      href={buildDetailPath('projects', timeEntry.project_id ?? '')}
                       className="text-blue-600 hover:underline"
                     >
                       {timeEntry.project.name}
@@ -176,7 +178,7 @@ export default function TimeEntryDetailPage() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm text-gray-500">Date d'ajout</label>
+                <label className="text-sm text-gray-500">Date d&apos;ajout</label>
                 <p className="font-medium">
                   {new Date(timeEntry.created_at || '').toLocaleDateString('fr-FR')}
                 </p>

@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MainLayout } from '@/components/layout';
-import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Input, Select } from '@/components/ui';
+import { Card, CardContent, Badge, Button, Input, Select } from '@/components/ui';
 import { equipmentService } from '@/services/api';
 import { Equipment } from '@/types';
-import { formatDate, formatCurrency, getStatusLabel } from '@/lib/utils';
+import { formatDate, formatCurrency } from '@/lib/utils';
+import { buildDetailPath, buildEditPath } from '@/lib/routes';
 
 const statusOptions = [
   { value: '', label: 'Tous les statuts' },
@@ -241,7 +242,7 @@ export default function EquipmentPage() {
 
                   <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2 justify-between">
                     <Link
-                      href={`/equipment/${item.id}`}
+                      href={buildDetailPath('equipment', item.id)}
                       className="text-sm text-blue-600 hover:text-blue-800"
                     >
                       Détails
@@ -255,7 +256,7 @@ export default function EquipmentPage() {
                       </button>
                     )}
                     <Link
-                      href={`/equipment/${item.id}/edit`}
+                      href={buildEditPath('equipment', item.id)}
                       className="text-sm text-gray-600 hover:text-gray-800"
                     >
                       Modifier

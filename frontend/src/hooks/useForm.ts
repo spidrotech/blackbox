@@ -7,11 +7,11 @@ export interface FormState<T> {
   isSubmitting: boolean;
 }
 
-export function useForm<T extends Record<string, any>>(
+export function useForm<T extends Record<string, unknown>>(
   initialData: T,
   onSubmit: (data: T) => Promise<void>,
   onSuccess?: () => void,
-  validators?: Partial<Record<keyof T, (value: any) => string | undefined>>
+  validators?: Partial<Record<keyof T, (value: unknown) => string | undefined>>
 ) {
   const [state, setState] = useState<FormState<T>>({
     data: initialData,
@@ -21,7 +21,7 @@ export function useForm<T extends Record<string, any>>(
   });
 
   const validateField = useCallback(
-    (name: keyof T, value: any) => {
+    (name: keyof T, value: unknown) => {
       if (validators?.[name]) {
         return validators[name]!(value);
       }
@@ -32,14 +32,19 @@ export function useForm<T extends Record<string, any>>(
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-      const { name, value, type } = e.target;
+      const target = e.target;
+      const { name } = target;
       const fieldName = name as keyof T;
+      const nextValue: unknown =
+        target instanceof HTMLInputElement && target.type === 'checkbox'
+          ? target.checked
+          : target.value;
 
       setState((prev) => ({
         ...prev,
         data: {
           ...prev.data,
-          [fieldName]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value,
+          [fieldName]: nextValue,
         },
         touched: {
           ...prev.touched,
@@ -47,7 +52,7 @@ export function useForm<T extends Record<string, any>>(
         },
       }));
 
-      const error = validateField(fieldName, value);
+      const error = validateField(fieldName, nextValue);
       setState((prev) => ({
         ...prev,
         errors: {
@@ -59,7 +64,7 @@ export function useForm<T extends Record<string, any>>(
     [validateField]
   );
 
-  const setFieldValue = useCallback((name: keyof T, value: any) => {
+  const setFieldValue = useCallback((name: keyof T, value: unknown) => {
     setState((prev) => ({
       ...prev,
       data: {

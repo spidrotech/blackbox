@@ -60,9 +60,7 @@ export default function NewProjectPage() {
   };
 
   const getCustomerName = (customer: Customer) => {
-    return customer.customer_type === 'company' 
-      ? customer.company_name 
-      : `${customer.first_name} ${customer.last_name}`;
+    return customer.name || `${customer.firstName || ''} ${customer.lastName || ''}`.trim();
   };
 
   const customerOptions = [
