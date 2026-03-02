@@ -27,6 +27,16 @@ from app.services.pdf_service import (
 router = APIRouter()
 
 
+def _default_bank_details(company: Optional[Company]) -> Optional[str]:
+    if not company:
+        return None
+    if company.iban and company.bic:
+        return f"IBAN : {company.iban}\nBIC : {company.bic}"
+    if company.iban:
+        return f"IBAN : {company.iban}"
+    return None
+
+
 def generate_quote_reference(session: Session, company_id: Optional[int]) -> str:
     """Génère une référence unique pour le devis
 
@@ -277,6 +287,8 @@ def create_quote(
     customer = session.get(Customer, quote_data.customer_id)
     if not customer or customer.company_id != current_user.company_id:
         raise HTTPException(status_code=400, detail="Client non trouvé")
+
+    company_obj = session.get(Company, current_user.company_id)
     
     # Générer la référence
     reference = generate_quote_reference(session, current_user.company_id)
@@ -296,9 +308,9 @@ def create_quote(
         project_id=quote_data.project_id,
         reference=reference,
         status=QuoteStatus.DRAFT,
-        description=quote_data.description,
+        description=quote_data.description or quote_data.subject,
         quote_date=quote_data.quote_date or date.today(),
-        expiry_date=quote_data.expiry_date or (date.today() + timedelta(days=30)),
+        expiry_date=quote_data.expiry_date or ((quote_data.quote_date or date.today()) + timedelta(days=int(quote_data.validity_days or 30))),
         work_start_date=quote_data.work_start_date,
         estimated_duration=quote_data.estimated_duration,
         worksite_address=quote_data.worksite_address,
@@ -307,8 +319,11 @@ def create_quote(
         cee_premium=_safe_decimal(getattr(quote_data, 'cee_premium', None)),
         mpr_premium=_safe_decimal(getattr(quote_data, 'mpr_premium', None)),
         notes=quote_data.notes,
-        payment_terms=quote_data.payment_terms,
-        conditions=quote_data.conditions or quote_data.terms_and_conditions,
+        payment_terms=quote_data.payment_terms or (company_obj.default_payment_terms if company_obj else None),
+        conditions=(quote_data.conditions or quote_data.terms_and_conditions or (company_obj.default_conditions if company_obj else None)),
+        bank_details=quote_data.bank_details or _default_bank_details(company_obj),
+        footer_notes=quote_data.footer_notes,
+        legal_mentions=quote_data.legal_mentions or (company_obj.legal_mentions if company_obj else None),
         created_by_id=current_user.id,
     )
     session.add(quote)
@@ -711,7 +726,7 @@ def convert_to_invoice(
     
     # Créer la facture
     invoice = Invoice(
-        company_id=current_user.company_id,
+        company_id=quote.company_id,
         customer_id=quote.customer_id,
         project_id=quote.project_id,
         quote_id=quote.id,
@@ -721,7 +736,9 @@ def convert_to_invoice(
         invoice_date=date.today(),
         due_date=date.today() + timedelta(days=30),
         notes=quote.notes,
-        payment_terms=quote.payment_terms,
+        payment_terms=quote.payment_terms or (company.default_payment_terms if company else None),
+        conditions=quote.conditions or (company.default_conditions if company else None),
+        bank_details=quote.bank_details or _default_bank_details(company),
         created_by_id=current_user.id,
     )
     session.add(invoice)

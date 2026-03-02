@@ -91,7 +91,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved]   = useState(false);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const t = useRef<ReturnType<typeof setTimeout>>();
+  const t = useRef<ReturnType<typeof setTimeout> | null>(null);
   const s = (p: any) => setCo((c: any) => ({ ...c, ...p }));
 
   useEffect(() => { load(); }, []);
@@ -107,7 +107,8 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       await settingsService.updateCompany(co);
-      setSaved(true); clearTimeout(t.current);
+      setSaved(true);
+      if (t.current) clearTimeout(t.current);
       t.current = setTimeout(() => setSaved(false), 2500);
     } catch { alert('Erreur lors de la sauvegarde'); }
     finally { setSaving(false); }
@@ -359,9 +360,9 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <div>
-                  <Txt label="Note de pied de facture" value={co.footer_text || ''} onChange={v => s({ footer_text: v })} rows={4} hint="IBAN, pénalités de retard" />
-                  <Sel label="Délai de paiement par défaut" value="30" onChange={() => {}}
-                    options={[{value:'0',label:'Comptant'},{value:'15',label:'15 jours'},{value:'30',label:'30 jours'},{value:'45',label:'45 jours'},{value:'60',label:'60 jours fin de mois'}]} />
+                  <Txt label="Modalités de paiement par défaut" value={co.default_payment_terms || ''} onChange={v => s({ default_payment_terms: v })} rows={3} hint="Ex : Paiement à 30 jours fin de mois." />
+                  <Txt label="Conditions/CGV par défaut" value={co.default_conditions || ''} onChange={v => s({ default_conditions: v })} rows={5} hint="Source principale des CGV sur devis/factures." />
+                  <Txt label="Note de pied de facture" value={co.footer_text || ''} onChange={v => s({ footer_text: v })} rows={3} hint="Mentions affichées en pied de page PDF." />
                 </div>
               </div>
             </>}
@@ -370,7 +371,11 @@ export default function SettingsPage() {
             {tab === 'mentions' && <>
               <H title="Mentions légales & CGV" desc="Affichées dans le pied de page de vos documents." />
               <div className="grid grid-cols-2 gap-x-8">
-                <Txt label="Mentions légales" value={co.legal_mentions || ''} onChange={v => s({ legal_mentions: v })} rows={8} hint="Assurance décennale, garantie, RGE" />
+                <div>
+                  <Txt label="Mentions légales" value={co.legal_mentions || ''} onChange={v => s({ legal_mentions: v })} rows={6} hint="Assurance décennale, garantie, RGE" />
+                  <Txt label="Modalités de paiement (documents)" value={co.default_payment_terms || ''} onChange={v => s({ default_payment_terms: v })} rows={3} hint="Utilisées par défaut dans devis et factures." />
+                  <Txt label="CGV / Conditions (documents)" value={co.default_conditions || ''} onChange={v => s({ default_conditions: v })} rows={5} hint="Utilisées par défaut dans devis et factures." />
+                </div>
                 <F>
                   <Lbl>CGV (PDF)</Lbl>
                   {co.cgv_url

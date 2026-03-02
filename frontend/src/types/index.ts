@@ -356,8 +356,16 @@ export interface InvoiceCreate {
   project_id?: number;
   quote_id?: number;
   subject?: string;
+  description?: string;
   notes?: string;
   terms_and_conditions?: string;
+  payment_terms?: string;
+  bank_details?: string;
+  conditions?: string;
+  purchase_order?: string;
+  invoice_date?: string;
+  due_date?: string;
+  invoice_type?: string;
   payment_terms_days?: number;
   discount_percent?: number;
   line_items?: any[];

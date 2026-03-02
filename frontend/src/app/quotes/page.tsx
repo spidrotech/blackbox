@@ -210,6 +210,59 @@ export default function QuotesPage() {
           </div>
         )}
 
+        {stats && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+              <h3 className="text-sm font-semibold text-gray-800 mb-3">Répartition des statuts</h3>
+              {[
+                { label: 'Brouillon', value: stats.draft, color: 'bg-gray-400' },
+                { label: 'Envoyé', value: stats.sent, color: 'bg-blue-500' },
+                { label: 'Consulté', value: stats.viewed, color: 'bg-purple-500' },
+                { label: 'Accepté', value: stats.accepted + stats.signed + stats.finalized, color: 'bg-emerald-500' },
+                { label: 'Refusé/Expiré', value: stats.rejected + stats.expired + stats.cancelled, color: 'bg-red-400' },
+              ].map(row => {
+                const maxVal = Math.max(stats.total, 1);
+                const width = Math.round((row.value / maxVal) * 100);
+                return (
+                  <div key={row.label} className="mb-2 last:mb-0">
+                    <div className="flex justify-between text-xs text-gray-500 mb-1"><span>{row.label}</span><span>{row.value}</span></div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className={`h-full ${row.color}`} style={{ width: `${width}%` }} /></div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+              <h3 className="text-sm font-semibold text-gray-800 mb-3">Tunnel de conversion devis</h3>
+              {(() => {
+                const step1 = stats.sent + stats.viewed + stats.signed + stats.accepted + stats.finalized + stats.rejected;
+                const step2 = stats.viewed + stats.signed + stats.accepted + stats.finalized;
+                const step3 = stats.accepted + stats.signed + stats.finalized;
+                const max = Math.max(step1, 1);
+                const s1 = Math.round((step1 / max) * 100);
+                const s2 = Math.round((step2 / max) * 100);
+                const s3 = Math.round((step3 / max) * 100);
+                return (
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between text-xs text-gray-500 mb-1"><span>Devis envoyés</span><span>{step1}</span></div>
+                      <div className="h-2 bg-blue-100 rounded"><div className="h-2 bg-blue-500 rounded" style={{ width: `${s1}%` }} /></div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs text-gray-500 mb-1"><span>Devis consultés</span><span>{step2}</span></div>
+                      <div className="h-2 bg-purple-100 rounded"><div className="h-2 bg-purple-500 rounded" style={{ width: `${s2}%` }} /></div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs text-gray-500 mb-1"><span>Devis gagnés</span><span>{step3}</span></div>
+                      <div className="h-2 bg-emerald-100 rounded"><div className="h-2 bg-emerald-500 rounded" style={{ width: `${s3}%` }} /></div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
           <div className="flex items-center justify-between px-4 pt-3 pb-0 border-b border-gray-100 gap-4">
             <div className="flex gap-0.5 overflow-x-auto flex-nowrap">

@@ -41,6 +41,14 @@ interface DashData {
   customers: { total: number };
   quotes: { total: number; pending: number; pendingValue: number };
   invoices: { total: number; unpaid: number; unpaidValue: number };
+  monthlyAnalytics?: {
+    key: string;
+    label: string;
+    paidRevenue: number;
+    pendingInvoices: number;
+    quotesCreated: number;
+    quotesAccepted: number;
+  }[];
   recentProjects: { id: number; name: string; status: string; customer_name: string; budget: number; worksite_address?: string; type?: string }[];
   recentQuotes: { id: number; reference: string; status: string; customer_name: string; amount: number; date?: string }[];
   recentInvoices: { id: number; reference: string; status: string; customer_name: string; amount: number; amount_paid: number; date?: string; due_date?: string }[];
@@ -55,7 +63,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     dashboardService.getData().then(res => {
-      if (res.success && res.data) setData(res.data);
+      if (res.success && res.data) setData(res.data as any);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -77,6 +85,12 @@ export default function DashboardPage() {
     recentProjects: [], recentQuotes: [], recentInvoices: [],
   };
 
+  const caRatio = d.ca_total > 0 ? Math.min(100, Math.round((d.ca_mois / d.ca_total) * 100)) : 0;
+  const pendingQuoteRatio = d.quotes.total > 0 ? Math.min(100, Math.round((d.quotes.pending / d.quotes.total) * 100)) : 0;
+  const unpaidInvoiceRatio = d.invoices.total > 0 ? Math.min(100, Math.round((d.invoices.unpaid / d.invoices.total) * 100)) : 0;
+  const monthly = d.monthlyAnalytics ?? [];
+  const monthlyMax = Math.max(...monthly.map(m => m.paidRevenue + m.pendingInvoices), 1);
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -90,13 +104,13 @@ export default function DashboardPage() {
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">CA encaissé ce mois</p>
             <p className="text-3xl font-bold text-gray-900 mt-2">{fmt(d.ca_mois)}</p>
             <p className="text-xs text-gray-400 mt-1">Total all time : {fmt(d.ca_total)}</p>
-            <div className="mt-3 h-1 rounded-full bg-blue-50"><div className="h-1 rounded-full bg-blue-500" style={{ width: '60%' }} /></div>
+            <div className="mt-3 h-1 rounded-full bg-blue-50"><div className="h-1 rounded-full bg-blue-500" style={{ width: `${caRatio}%` }} /></div>
           </div>
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Devis en attente</p>
             <p className="text-3xl font-bold text-gray-900 mt-2">{fmt(d.quotes.pendingValue)}</p>
             <p className="text-xs text-gray-400 mt-1">{d.quotes.pending} devis  {d.quotes.total} au total</p>
-            <div className="mt-3 h-1 rounded-full bg-orange-50"><div className="h-1 rounded-full bg-orange-400" style={{ width: '40%' }} /></div>
+            <div className="mt-3 h-1 rounded-full bg-orange-50"><div className="h-1 rounded-full bg-orange-400" style={{ width: `${pendingQuoteRatio}%` }} /></div>
           </div>
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Reste à encaisser</p>
@@ -106,9 +120,43 @@ export default function DashboardPage() {
             ) : (
               <p className="text-xs text-gray-400 mt-1">{d.invoices.unpaid} facture(s) impayée(s)</p>
             )}
-            <div className="mt-3 h-1 rounded-full bg-red-50"><div className="h-1 rounded-full bg-red-400" style={{ width: '30%' }} /></div>
+            <div className="mt-3 h-1 rounded-full bg-red-50"><div className="h-1 rounded-full bg-red-400" style={{ width: `${unpaidInvoiceRatio}%` }} /></div>
           </div>
         </div>
+
+        {monthly.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="font-semibold text-gray-800">Tendance mensuelle</h2>
+                <p className="text-xs text-gray-400">CA encaissé, reste à encaisser et conversion devis</p>
+              </div>
+              <div className="flex gap-3 text-xs text-gray-500">
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"/> Encaissé</span>
+                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-200"/> En attente</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-6 gap-3">
+              {monthly.map(m => {
+                const paidH = Math.round((m.paidRevenue / monthlyMax) * 100);
+                const pendingH = Math.round((m.pendingInvoices / monthlyMax) * 100);
+                const conv = m.quotesCreated > 0 ? Math.round((m.quotesAccepted / m.quotesCreated) * 100) : 0;
+                return (
+                  <div key={m.key} className="group">
+                    <div className="h-28 flex flex-col justify-end">
+                      <div className="w-full bg-blue-200 rounded-t" style={{ height: `${pendingH}%` }} />
+                      <div className="w-full bg-blue-500" style={{ height: `${paidH}%`, borderRadius: pendingH ? '0' : '4px 4px 0 0' }} />
+                    </div>
+                    <div className="mt-2 text-center">
+                      <p className="text-[11px] font-semibold text-gray-600">{m.label}</p>
+                      <p className="text-[10px] text-gray-400">{conv}% conv.</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm">

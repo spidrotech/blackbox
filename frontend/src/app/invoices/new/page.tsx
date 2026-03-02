@@ -8,10 +8,11 @@ import { invoiceService, quoteService, customerService, projectService, settings
 import { InvoiceCreate, Quote, Customer, Project } from '@/types';
 import { LineItemsEditor, LineItemData } from '@/components/quotes/LineItemsEditor';
 import InvoicePreview, { InvoicePreviewData, InvoiceCustomer, InvoiceCompany } from '@/components/invoices/InvoicePreview';
-
-const DEFAULT_CGV = `Article 1 – Paiement : Règlement à réception de facture. Tout retard entraîne des pénalités de retard au taux de 3 fois le taux légal. Indemnité forfaitaire de recouvrement : 40 €.
-Article 2 – Garanties : Travaux garantis conformément aux articles 1792 et suivants du Code Civil.
-Article 3 – Litiges : Tout litige relève de la compétence du Tribunal de Commerce du siège social.`;
+import {
+  CompanySettingsData,
+  getDocumentDefaultsFromCompany,
+  mapCompanySettingsToDocumentCompany,
+} from '@/lib/company-settings';
 
 const toLineItemData = (item: any): LineItemData => ({
   id: item.id,
@@ -24,24 +25,6 @@ const toLineItemData = (item: any): LineItemData => ({
   discount_percent: item.discount_percent ? Number(item.discount_percent) : undefined,
   vat_rate: Number(item.vat_rate ?? item.tax_rate ?? 20),
   reference: item.reference,
-});
-
-const mapCompany = (c: any): InvoiceCompany => ({
-  name: c.name,
-  address: c.address,
-  city: c.city,
-  postalCode: c.postal_code,
-  siret: c.siret,
-  vatNumber: c.vat_number,
-  phone: c.phone,
-  email: c.email,
-  logoUrl: c.logo_url,
-  iban: c.iban,
-  bic: c.bic,
-  rcsCity: c.rcs_city,
-  capital: c.capital,
-  legalMentions: c.legal_mentions,
-  defaultConditions: c.default_conditions,
 });
 
 export default function NewInvoicePage() {
@@ -68,7 +51,9 @@ export default function NewInvoicePage() {
     quote_id: undefined,
     subject: '',
     notes: '',
-    terms_and_conditions: DEFAULT_CGV,
+    terms_and_conditions: '',
+    payment_terms: '',
+    bank_details: '',
     discount_percent: 0,
     invoice_date: today,
     due_date: thirtyDays,
@@ -82,10 +67,11 @@ export default function NewInvoicePage() {
   const loadData = async () => {
     setDataLoading(true);
     try {
-      const [quotesRes, customersRes, projectsRes] = await Promise.all([
+      const [quotesRes, customersRes, projectsRes, companyRes] = await Promise.all([
         quoteService.getAll(),
         customerService.getAll(),
         projectService.getAll(),
+        settingsService.getCompany(),
       ]);
 
       const allQuotes: Quote[] = Array.isArray(quotesRes.data)
@@ -102,10 +88,17 @@ export default function NewInvoicePage() {
       setCustomers(allCustomers);
       setProjects(allProjects);
 
-      // Load company for preview
-      settingsService.getCompany().then(res => {
-        if (res.success && res.data) setCompany(mapCompany(res.data));
-      }).catch(() => {});
+      if (companyRes.success && companyRes.data) {
+        const companyData = companyRes.data as CompanySettingsData;
+        setCompany(mapCompanySettingsToDocumentCompany(companyData) as InvoiceCompany);
+        const defaults = getDocumentDefaultsFromCompany(companyData);
+        setFormData(prev => ({
+          ...prev,
+          terms_and_conditions: prev.terms_and_conditions || defaults.conditions,
+          payment_terms: prev.payment_terms || defaults.paymentTerms,
+          bank_details: prev.bank_details || defaults.bankDetails,
+        }));
+      }
 
       if (quoteIdParam) {
         const q = allQuotes.find(q => q.id === parseInt(quoteIdParam));
@@ -184,6 +177,7 @@ export default function NewInvoicePage() {
     try {
       const payload = {
         ...formData,
+        conditions: formData.terms_and_conditions,
         line_items: lineItems.map((item, i) => ({ ...item, display_order: i })),
       };
       const res = await invoiceService.create(payload as InvoiceCreate);

@@ -133,6 +133,7 @@ class CustomerData:
 
 @dataclass
 class QuoteData:
+    doc_type: str = "quote"  # quote | invoice
     reference: str = ""
     status: str = "draft"
     quote_date: str = ""
@@ -410,21 +411,23 @@ class QuotePDFGenerator:
         if rcs_parts:
             left_parts.append(Paragraph("  ─  ".join(rcs_parts), st["company_muted"]))
 
-        # ---- Colonne droite : DEVIS + ref + dates ----
+        # ---- Colonne droite : type document + ref + dates ----
+        is_invoice = self.data.doc_type == "invoice"
+        doc_title = "FACTURE" if is_invoice else "DEVIS"
         right_parts: list[Any] = [
-            Paragraph("DEVIS", st["doc_title"]),
+            Paragraph(doc_title, st["doc_title"]),
             Spacer(1, 2 * mm),
             Paragraph(self.data.reference or "—", st["doc_ref"]),
             Spacer(1, 3 * mm),
         ]
 
         date_rows = [
-            ("Date du devis :", self.data.quote_date),
-            ("Valable jusqu'au :", self.data.expiry_date),
+            (("Date de facture :" if is_invoice else "Date du devis :"), self.data.quote_date),
+            (("Échéance :" if is_invoice else "Valable jusqu'au :"), self.data.expiry_date),
         ]
-        if self.data.work_start_date:
+        if self.data.work_start_date and not is_invoice:
             date_rows.append(("Début des travaux :", self.data.work_start_date))
-        if self.data.estimated_duration:
+        if self.data.estimated_duration and not is_invoice:
             date_rows.append(("Durée estimée :", self.data.estimated_duration))
 
         for lbl, val in date_rows:
@@ -894,6 +897,35 @@ class QuotePDFGenerator:
 
     def _build_signature_block(self) -> list[Any]:
         st = self.styles
+        if self.data.doc_type == "invoice":
+            info_content: list[Any] = [
+                Paragraph("CONDITIONS DE RÈGLEMENT", st["sign_title"]),
+                Spacer(1, 2 * mm),
+            ]
+            if self.data.payment_terms:
+                info_content.append(Paragraph(self.data.payment_terms, ParagraphStyle("pt_invoice", parent=st["sign_label"], alignment=TA_LEFT)))
+
+            bank_text = self.data.bank_details if self.data.bank_details else (
+                f"IBAN : {self.data.company.iban}" if self.data.company.iban else ""
+            )
+            if bank_text:
+                info_content.append(Spacer(1, 2 * mm))
+                info_content.append(Paragraph(bank_text, ParagraphStyle("bt_invoice", parent=st["sign_label"], alignment=TA_LEFT, fontSize=7.5)))
+            if self.data.company.bic:
+                info_content.append(Paragraph(f"BIC : {self.data.company.bic}", ParagraphStyle("bic_invoice", parent=st["sign_label"], alignment=TA_LEFT, fontSize=7.5)))
+
+            rows = [[p] for p in info_content]
+            table = Table(rows, colWidths=[USABLE_W])
+            table.setStyle(TableStyle([
+                ("BOX", (0, 0), (-1, -1), 0.5, C_BORDER),
+                ("BACKGROUND", (0, 0), (-1, -1), C_LIGHT),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5 * mm),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5 * mm),
+                ("TOPPADDING", (0, 0), (-1, -1), 3 * mm),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2 * mm),
+            ]))
+            return [table, Spacer(1, 8 * mm)]
+
         box_h = 35 * mm
 
         sign_content: list[Any] = [
@@ -1022,4 +1054,10 @@ class QuotePDFGenerator:
 
 def generate_quote_pdf(data: QuoteData) -> bytes:
     """Génère et retourne les bytes du PDF pour un devis."""
+    return QuotePDFGenerator(data).generate()
+
+
+def generate_invoice_pdf(data: QuoteData) -> bytes:
+    """Génère et retourne les bytes du PDF pour une facture."""
+    data.doc_type = "invoice"
     return QuotePDFGenerator(data).generate()

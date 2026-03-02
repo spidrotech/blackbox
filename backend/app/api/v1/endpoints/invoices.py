@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
-from sqlmodel import Session, select
+from fastapi.responses import Response
+from sqlmodel import Session, select, col
 from typing import List, Optional
 from datetime import datetime, date, timedelta
 from decimal import Decimal
@@ -11,6 +12,14 @@ from app.models import (
 )
 from app.models.enums import InvoiceStatus, LineItemType
 from app.core.security import get_current_user_required
+from app.services.pdf_service import (
+    HAS_REPORTLAB,
+    CompanyData,
+    CustomerData,
+    LineItemData,
+    QuoteData,
+    generate_invoice_pdf,
+)
 
 router = APIRouter()
 
@@ -29,6 +38,16 @@ def generate_invoice_reference(session: Session, company_id: int) -> str:
         session.add(company)
     
     return reference
+
+
+def _default_bank_details(company: Optional[Company]) -> Optional[str]:
+    if not company:
+        return None
+    if company.iban and company.bic:
+        return f"IBAN : {company.iban}\nBIC : {company.bic}"
+    if company.iban:
+        return f"IBAN : {company.iban}"
+    return None
 
 
 def get_invoice_response(invoice: Invoice, session: Session) -> dict:
@@ -170,11 +189,11 @@ def list_invoices(
     
     if search:
         statement = statement.where(
-            (Invoice.reference.ilike(f"%{search}%")) |
-            (Invoice.description.ilike(f"%{search}%"))
+            (col(Invoice.reference).ilike(f"%{search}%")) |  # type: ignore[arg-type]
+            (col(Invoice.description).ilike(f"%{search}%"))  # type: ignore[arg-type]
         )
     
-    statement = statement.order_by(Invoice.created_at.desc()).offset(skip).limit(limit)
+    statement = statement.order_by(col(Invoice.created_at).desc()).offset(skip).limit(limit)
     invoices = session.exec(statement).all()
     
     return {
@@ -216,12 +235,15 @@ def create_invoice(
     customer = session.get(Customer, invoice_data.customer_id)
     if not customer or customer.company_id != current_user.company_id:
         raise HTTPException(status_code=400, detail="Client non trouvé")
+
+    company = session.get(Company, current_user.company_id)
     
     # Générer la référence
-    reference = generate_invoice_reference(session, current_user.company_id)
+    company_id = current_user.company_id or customer.company_id
+    reference = generate_invoice_reference(session, company_id)
     
     invoice = Invoice(
-        company_id=current_user.company_id,
+        company_id=company_id,
         customer_id=invoice_data.customer_id,
         project_id=invoice_data.project_id,
         quote_id=invoice_data.quote_id,
@@ -231,10 +253,10 @@ def create_invoice(
         invoice_date=invoice_data.invoice_date or date.today(),
         due_date=invoice_data.due_date or (date.today() + timedelta(days=30)),
         notes=invoice_data.notes,
-        payment_terms=invoice_data.payment_terms,
-        bank_details=invoice_data.bank_details,
+        payment_terms=invoice_data.payment_terms or (company.default_payment_terms if company else None),
+        bank_details=invoice_data.bank_details or _default_bank_details(company),
         purchase_order=invoice_data.purchase_order,
-        conditions=invoice_data.conditions,
+        conditions=invoice_data.conditions or (company.default_conditions if company else None),
         invoice_type=invoice_data.invoice_type,
         created_by_id=current_user.id,
     )
@@ -457,3 +479,103 @@ def delete_invoice(
     session.commit()
     
     return {"success": True, "message": "Facture supprimée"}
+
+
+@router.get("/{invoice_id}/pdf")
+def download_invoice_pdf(
+    invoice_id: int,
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session)
+):
+    """Génère et télécharge le PDF d'une facture."""
+    if not HAS_REPORTLAB:
+        raise HTTPException(status_code=500, detail="reportlab non installé.")
+
+    invoice = session.get(Invoice, invoice_id)
+    if not invoice or invoice.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+
+    company_obj = session.get(Company, invoice.company_id) if invoice.company_id else None
+    customer_obj = session.get(Customer, invoice.customer_id) if invoice.customer_id else None
+
+    co = CompanyData()
+    if company_obj:
+        co.name = company_obj.name or ""
+        co.address = company_obj.address or ""
+        co.city = company_obj.city or ""
+        co.postal_code = company_obj.postal_code or ""
+        co.phone = company_obj.phone or ""
+        co.email = company_obj.email or ""
+        co.website = company_obj.website or ""
+        co.siret = company_obj.siret or ""
+        co.vat_number = company_obj.vat_number or ""
+        co.iban = company_obj.iban or ""
+        co.bic = company_obj.bic or ""
+        co.logo_url = company_obj.logo_url or ""
+        co.header_text = company_obj.header_text or ""
+        co.footer_text = company_obj.footer_text or ""
+        co.vat_subject = bool(getattr(company_obj, 'vat_subject', True))
+        co.rcs_city = getattr(company_obj, 'rcs_city', None) or ""
+        co.rm_number = getattr(company_obj, 'rm_number', None) or ""
+        co.capital = float(getattr(company_obj, 'capital', None) or 0)
+        co.ape_code = getattr(company_obj, 'ape_code', None) or ""
+        co.visuals_json = getattr(company_obj, 'visuals_json', None) or ""
+
+    cu = CustomerData()
+    if customer_obj:
+        cu.name = customer_obj.name or ""
+        cu.contact_name = customer_obj.contact_name or ""
+        cu.phone = customer_obj.phone or ""
+        cu.email = customer_obj.email or ""
+
+    db_items = session.exec(
+        select(LineItem).where(LineItem.invoice_id == invoice.id).order_by(LineItem.display_order)
+    ).all()
+
+    line_items = [
+        LineItemData(
+            designation=item.description or "",
+            long_description=item.long_description or "",
+            section=item.section or "",
+            quantity=float(item.quantity),
+            unit=item.unit or "u",
+            unit_price=float(item.unit_price),
+            discount_percent=float(item.discount_percent or 0),
+            tax_rate=float(item.tax_rate),
+            item_type=item.item_type.value if hasattr(item.item_type, "value") else str(item.item_type),
+            reference=item.reference or "",
+        )
+        for item in db_items
+    ]
+
+    data = QuoteData(
+        doc_type="invoice",
+        reference=invoice.reference,
+        status=invoice.status.value if hasattr(invoice.status, "value") else str(invoice.status),
+        quote_date=invoice.invoice_date.strftime("%d/%m/%Y") if invoice.invoice_date else "",
+        expiry_date=invoice.due_date.strftime("%d/%m/%Y") if invoice.due_date else "",
+        subject=invoice.description or "",
+        notes=invoice.notes or "",
+        conditions=invoice.conditions or (company_obj.default_conditions if company_obj else "") or "",
+        payment_terms=invoice.payment_terms or (company_obj.default_payment_terms if company_obj else "") or "",
+        bank_details=invoice.bank_details or _default_bank_details(company_obj) or "",
+        legal_mentions=(company_obj.legal_mentions if company_obj else "") or "",
+        line_items=line_items,
+        company=co,
+        customer=cu,
+    )
+
+    try:
+        pdf_bytes = generate_invoice_pdf(data)
+    except Exception as exc:
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Erreur PDF : {exc}")
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="facture-{invoice.reference}.pdf"'
+        },
+    )

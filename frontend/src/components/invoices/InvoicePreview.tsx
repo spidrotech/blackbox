@@ -108,7 +108,7 @@ export default function InvoicePreview({ data, asModal = false }: Props) {
   const paymentConditions =
     conditions ||
     company?.defaultConditions ||
-    `Paiement à réception de facture.\nEn cas de retard de paiement, des pénalités au taux de 3 fois le taux légal en vigueur seront appliquées, ainsi qu'une indemnité forfaitaire de recouvrement de 40 €.\nAucun escompte n'est accordé pour paiement anticipé.`;
+    '';
 
   /* ── Bank details ────────────────────────────────────────────────────── */
   const bankInfo = bankDetails || (

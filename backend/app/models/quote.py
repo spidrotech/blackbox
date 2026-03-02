@@ -119,6 +119,9 @@ class QuoteCreate(SQLModel):
     mpr_premium: Optional[float] = None
     waste_management_fee: Optional[float] = None
     terms_and_conditions: Optional[str] = None
+    footer_notes: Optional[str] = None
+    bank_details: Optional[str] = None
+    legal_mentions: Optional[str] = None
     line_items: Optional[List[dict]] = None
 
 

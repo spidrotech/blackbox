@@ -4,9 +4,13 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
-import { quoteService, customerService, projectService } from '@/services/api';
+import { quoteService, customerService, projectService, settingsService } from '@/services/api';
 import { QuoteCreate, Customer, Project } from '@/types';
 import { LineItemsEditor, LineItemData } from '@/components/quotes/LineItemsEditor';
+import {
+  CompanySettingsData,
+  getDocumentDefaultsFromCompany,
+} from '@/lib/company-settings';
 
 export default function EditQuotePage() {
   const router = useRouter();
@@ -18,9 +22,7 @@ export default function EditQuotePage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   
-  const DEFAULT_CGV = `Article 1 – Paiement : Règlement à réception de facture. Tout retard entraîne des pénalités de retard au taux de 3 fois le taux légal, applicables de plein droit. Indemnité forfaitaire de recouvrement : 40 €.
-Article 2 – Garanties : Travaux garantis conformément aux articles 1792 et suivants du Code Civil (garantie décennale, biennale, de parfait achèvement).
-Article 3 – Litiges : En cas de litige, le Tribunal de Commerce du siège social est seul compétent.`;
+  const DEFAULT_CGV = '';
 
   const [formData, setFormData] = useState<QuoteCreate>({
     customer_id: 0,
@@ -51,11 +53,16 @@ Article 3 – Litiges : En cas de litige, le Tribunal de Commerce du siège soci
 
   const loadData = async () => {
     try {
-      const [quoteRes, customersRes, projectsRes] = await Promise.all([
+      const [quoteRes, customersRes, projectsRes, settingsRes] = await Promise.all([
         quoteService.getById(quoteId),
         customerService.getAll(),
         projectService.getAll(),
+        settingsService.getCompany(),
       ]);
+
+      const defaults = settingsRes.success && settingsRes.data
+        ? getDocumentDefaultsFromCompany(settingsRes.data as CompanySettingsData)
+        : { conditions: DEFAULT_CGV, paymentTerms: '', bankDetails: '', legalMentions: '' };
       
       const quoteData = (quoteRes as any).quote ?? quoteRes.data;
       if (quoteRes.success && quoteData) {
@@ -67,8 +74,8 @@ Article 3 – Litiges : En cas de litige, le Tribunal de Commerce du siège soci
           subject: q.subject || q.description || '',
           description: q.description || q.subject || '',
           notes: q.notes || '',
-          terms_and_conditions: q.conditions || q.terms_and_conditions || '',
-          conditions: q.conditions || q.terms_and_conditions || '',
+          terms_and_conditions: q.conditions || q.terms_and_conditions || defaults.conditions,
+          conditions: q.conditions || q.terms_and_conditions || defaults.conditions,
           validity_days: (q.expiry_date || q.expiryDate) ? Math.ceil((new Date(q.expiry_date || q.expiryDate).getTime() - (new Date(q.quote_date || q.quoteDate || Date.now()).getTime())) / (1000 * 60 * 60 * 24)) : 30,
           deposit_percent: q.deposit_percentage || q.deposit_percent || 0,
           discount_percent: q.global_discount_percent || q.discount_percent || 0,
@@ -77,8 +84,9 @@ Article 3 – Litiges : En cas de litige, le Tribunal de Commerce du siège soci
           waste_management_fee: q.waste_management || q.waste_management_fee || 0,
           worksite_address: q.worksite_address || q.worksiteAddress || '',
           footer_notes: q.footer_notes || q.footerNotes || '',
-          bank_details: q.bank_details || q.bankDetails || '',
-          legal_mentions: q.legal_mentions || q.legalMentions || '',
+          bank_details: q.bank_details || q.bankDetails || defaults.bankDetails,
+          legal_mentions: q.legal_mentions || q.legalMentions || defaults.legalMentions,
+          payment_terms: q.payment_terms || q.paymentTerms || defaults.paymentTerms,
           line_items: lineItems,
         });
         setItems(lineItems.map((li: any) => ({

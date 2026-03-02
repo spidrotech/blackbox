@@ -7,10 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select, Modal 
 import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
 import { CustomerSelector } from '@/components/customers/CustomerSelector';
 import { NewCustomerForm } from '@/components/customers/NewCustomerForm';
-import { quoteService, customerService, projectService, priceLibraryService } from '@/services/api';
+import { quoteService, customerService, projectService, priceLibraryService, settingsService } from '@/services/api';
 import { QuoteCreate, Customer, Project, PriceLibraryItem } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { LineItemsEditor, LineItemData } from '@/components/quotes/LineItemsEditor';
+import {
+  CompanySettingsData,
+  getDocumentDefaultsFromCompany,
+} from '@/lib/company-settings';
 
 
 export default function NewQuotePage() {
@@ -32,10 +36,8 @@ export default function NewQuotePage() {
     description: '',
     notes: '',
     terms_and_conditions: '',
-    conditions: `Article 1 – Paiement : Règlement à réception de facture. Tout retard entraîne des pénalités de retard au taux de 3 fois le taux légal, applicables de plein droit. Indemnité forfaitaire de recouvrement : 40 €.
-Article 2 – Garanties : Travaux garantis conformément aux articles 1792 et suivants du Code Civil (garantie décennale, biennale, de parfait achèvement).
-Article 3 – Litiges : En cas de litige, le Tribunal de Commerce du siège social est seul compétent.`,
-    payment_terms: 'Virement bancaire a 30 jours',
+    conditions: '',
+    payment_terms: '',
     validity_days: 30,
     deposit_percent: 30,
     discount_percent: 0,
@@ -77,14 +79,26 @@ Article 3 – Litiges : En cas de litige, le Tribunal de Commerce du siège soci
 
   const loadData = async () => {
     try {
-      const [customersRes, projectsRes, priceRes] = await Promise.all([
+      const [customersRes, projectsRes, priceRes, companyRes] = await Promise.all([
         customerService.getAll(),
         projectService.getAll(),
         priceLibraryService.getFavorites(),
+        settingsService.getCompany(),
       ]);
       if (customersRes.success) setCustomers(Array.isArray(customersRes.data) ? customersRes.data : []);
       if (projectsRes.success) setProjects(Array.isArray(projectsRes.data) ? projectsRes.data : []);
       if (priceRes.success) setPriceLibrary(Array.isArray(priceRes.data) ? priceRes.data : []);
+      if (companyRes.success && companyRes.data) {
+        const defaults = getDocumentDefaultsFromCompany(companyRes.data as CompanySettingsData);
+        setFormData(prev => ({
+          ...prev,
+          conditions: prev.conditions || defaults.conditions,
+          terms_and_conditions: prev.terms_and_conditions || defaults.conditions,
+          payment_terms: prev.payment_terms || defaults.paymentTerms,
+          bank_details: prev.bank_details || defaults.bankDetails,
+          legal_mentions: prev.legal_mentions || defaults.legalMentions,
+        }));
+      }
     } catch (error) {
       console.error('Error loading data:', error);
     }
