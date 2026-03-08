@@ -28,7 +28,6 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Matcher tout sauf les assets statiques
-    '/((?!_next/static|_next/image|favicon.ico|public).*)',
+    '/__proxy-disabled',
   ],
 };

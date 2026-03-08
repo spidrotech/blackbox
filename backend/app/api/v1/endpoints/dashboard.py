@@ -21,25 +21,20 @@ def get_dashboard(
     now = datetime.now()
     month_start = date(now.year, now.month, 1)
 
-    # Customers
-    customers_total = session.exec(select(func.count(Customer.id)).where(Customer.company_id == cid)).one()
+    # Customers (aligné avec l'onglet Clients qui filtre par défaut les actifs)
+    customers_total = session.exec(
+        select(func.count(col(Customer.id))).where(
+            Customer.company_id == cid,
+            Customer.is_active == True,  # noqa: E712
+        )
+    ).one()
 
     # Projects
     projects = session.exec(select(Project).where(Project.company_id == cid)).all()
     active_projects = [p for p in projects if getattr(p, 'status', '') not in ('completed', 'cancelled', 'archived')]
 
-    # Quotes with worksite_address but no project (count as virtual chantiers)
-    quotes_with_worksite = session.exec(
-        select(Quote).where(
-            Quote.company_id == cid,
-            Quote.worksite_address.isnot(None),  # type: ignore[union-attr]
-            col(Quote.worksite_address) != "",  # type: ignore[arg-type]
-            Quote.project_id.is_(None),  # type: ignore[union-attr]
-        )
-    ).all()
-    # Total unique worksites = projects + quotes-only chantiers
-    worksites_total = len(projects) + len(quotes_with_worksite)
-    worksites_active = len(active_projects) + len(quotes_with_worksite)
+    projects_total = len(projects)
+    projects_active = len(active_projects)
 
     # Quotes
     quotes = session.exec(select(Quote).where(Quote.company_id == cid).order_by(col(Quote.created_at).desc())).all()
@@ -75,7 +70,6 @@ def get_dashboard(
         *(q.customer_id for q in quotes if q.customer_id),
         *(i.customer_id for i in invoices if i.customer_id),
         *(p.customer_id for p in projects if p.customer_id),
-        *(q.customer_id for q in quotes_with_worksite if q.customer_id),
     }
     customers = session.exec(
         select(Customer).where(
@@ -178,14 +172,16 @@ def get_dashboard(
     # Recent documents
     def quote_row(q: Quote) -> dict:
         cn = customer_map.get(q.customer_id, '') if q.customer_id else ''
+        quote_amount = round(quote_totals.get(q.id, 0.0), 2) if q.id is not None else 0.0
         return {"id": q.id, "reference": q.reference, "status": q.status.value, "customer_name": cn,
-            "amount": round(quote_totals.get(q.id, 0.0), 2), "date": q.quote_date.isoformat() if q.quote_date else None,
+            "amount": quote_amount, "date": q.quote_date.isoformat() if q.quote_date else None,
                 "created_at": q.created_at.isoformat() if q.created_at else None}
 
     def inv_row(i: Invoice) -> dict:
         cn = customer_map.get(i.customer_id, '') if i.customer_id else ''
+        invoice_amount = round(invoice_totals.get(i.id, 0.0), 2) if i.id is not None else 0.0
         return {"id": i.id, "reference": i.reference, "status": i.status.value, "customer_name": cn,
-            "amount": round(invoice_totals.get(i.id, 0.0), 2), "amount_paid": float(i.amount_paid or 0),
+            "amount": invoice_amount, "amount_paid": float(i.amount_paid or 0),
                 "date": i.invoice_date.isoformat() if i.invoice_date else None,
                 "due_date": i.due_date.isoformat() if i.due_date else None,
                 "created_at": i.created_at.isoformat() if i.created_at else None}
@@ -196,16 +192,7 @@ def get_dashboard(
                 "customer_name": cn, "budget": float(getattr(p, 'budget', 0) or 0),
                 "created_at": p.created_at.isoformat() if p.created_at else None}
 
-    def worksite_quote_row(q: Quote) -> dict:
-        cn = customer_map.get(q.customer_id, '') if q.customer_id else ''
-        return {"id": q.id, "name": f"Chantier – {q.reference}", "status": "quote",
-                "customer_name": cn, "budget": 0.0,
-                "worksite_address": q.worksite_address,
-                "created_at": q.created_at.isoformat() if q.created_at else None,
-                "type": "quote_worksite"}
-
-    # Merge & sort chantiers (projects first, then quote worksites)
-    all_recent_projects = [proj_row(p) for p in projects[:6]] + [worksite_quote_row(q) for q in quotes_with_worksite[:4]]
+    all_recent_projects = [proj_row(p) for p in projects[:8]]
 
     return {
         "success": True,
@@ -214,7 +201,7 @@ def get_dashboard(
             "ca_total": round(ca_total, 2),
             "reste_a_encaisser": round(reste, 2),
             "overdue_count": len([i for i in invoices if i.status == InvoiceStatus.OVERDUE]),
-            "projects": {"total": worksites_total, "active": worksites_active},
+            "projects": {"total": projects_total, "active": projects_active},
             "customers": {"total": customers_total},
             "quotes": {"total": len(quotes), "pending": len(pending_quotes), "pendingValue": pending_val},
             "invoices": {"total": len(invoices), "unpaid": len(unpaid_inv), "unpaidValue": round(reste, 2)},

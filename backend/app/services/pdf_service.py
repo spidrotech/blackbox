@@ -231,10 +231,11 @@ def _build_styles(
 class _PageTemplate:
     """Canvas callback : numérotation + footer + filigrane BROUILLON."""
 
-    def __init__(self, company: CompanyData, is_draft: bool, footer_text: str) -> None:
+    def __init__(self, company: CompanyData, is_draft: bool, footer_text: str, reference: str = "") -> None:
         self.company = company
         self.is_draft = is_draft
         self.footer_text = footer_text
+        self.reference = reference
 
     def __call__(self, canvas: Any, doc: Any) -> None:
         canvas.saveState()
@@ -249,37 +250,68 @@ class _PageTemplate:
             canvas.rotate(-45)
             canvas.translate(-PAGE_W / 2, -PAGE_H / 2)
 
-        # Ligne séparatrice footer
+        # Ligne séparatrice footer (at 18mm from bottom)
         canvas.setStrokeColor(C_BORDER)
         canvas.setLineWidth(0.5)
-        canvas.line(MARGIN_L, MARGIN_B - 2 * mm, PAGE_W - MARGIN_R, MARGIN_B - 2 * mm)
+        canvas.line(MARGIN_L, 18 * mm, PAGE_W - MARGIN_R, 18 * mm)
 
-        # Footer gauche : mentions légales complètes (style Obat)
+        # Draw RGE QualiPAC pseudo-logo
+        logo_x = MARGIN_L
+        logo_y = 6 * mm
+        canvas.setFillColor(colors.HexColor("#7E22CE")) # Purple
+        canvas.rect(logo_x, logo_y, 22 * mm, 10 * mm, fill=1, stroke=0)
+        canvas.setFillColor(colors.HexColor("#FFFFFF"))
+        
+        # Red little square for RGE style
+        canvas.setFillColor(colors.HexColor("#EF4444"))
+        canvas.rect(logo_x + 16 * mm, logo_y + 5 * mm, 4 * mm, 4 * mm, fill=1, stroke=0)
+        
+        canvas.setFillColor(colors.HexColor("#FFFFFF"))
+        canvas.setFont("Helvetica-Bold", 8)
+        canvas.drawString(logo_x + 2 * mm, logo_y + 5.5 * mm, "RGE")
+        canvas.setFont("Helvetica", 7)
+        canvas.drawString(logo_x + 2 * mm, logo_y + 2 * mm, "QualiPAC")
+
+        # Footer central
         canvas.setFont("Helvetica", 6.5)
         canvas.setFillColor(C_MUTED)
-        co = self.company
-        legal_parts = [co.name] if co.name else []
-        if co.siret:
-            legal_parts.append(f"SIRET : {co.siret}")
-        if co.vat_number and co.vat_subject:
-            legal_parts.append(f"TVA : {co.vat_number}")
-        if co.rcs_city:
-            legal_parts.append(f"RCS {co.rcs_city}")
-        if co.rm_number:
-            legal_parts.append(f"RM {co.rm_number}")
-        if co.capital:
-            legal_parts.append(f"Capital {int(co.capital):,} €".replace(",", "\u202f"))
-        if co.ape_code:
-            legal_parts.append(f"APE {co.ape_code}")
-        # Custom footer text overrides or appends
-        if self.footer_text and self.footer_text != co.name:
-            legal_parts.append(self.footer_text)
-        footer_line = "  ·  ".join(legal_parts)
-        canvas.drawString(MARGIN_L, MARGIN_B - 6 * mm, footer_line)
-
-        # Footer droite : numéro de page
+        
+        if self.footer_text:
+            lines = [l.strip() for l in self.footer_text.split('\n') if l.strip()]
+            y_pos = 14 * mm
+            for line in lines:
+                canvas.drawCentredString(PAGE_W / 2.0, y_pos, line)
+                y_pos -= 8
+        else:
+            co = self.company
+            addr_line = f"{co.name} - {co.address} {co.postal_code} {co.city}".strip(" -")
+            
+            legal_parts = []
+            if co.siret: legal_parts.append(f"SIRET : {co.siret}")
+            if co.vat_number and co.vat_subject: legal_parts.append(f"TVA inter : {co.vat_number}")
+            if co.rcs_city: legal_parts.append(f"RCS {co.rcs_city}")
+            if co.rm_number: legal_parts.append(f"RM {co.rm_number}")
+            if co.capital: legal_parts.append(f"Capital {int(co.capital):,} €".replace(",", " "))
+            if co.ape_code: legal_parts.append(f"APE {co.ape_code}")
+            
+            legal_line = " - ".join(legal_parts)
+            contact_line = f"Tél : {co.phone} - {co.website} - {co.email}".strip(" -")
+            
+            y_pos = 14 * mm
+            canvas.drawCentredString(PAGE_W / 2.0, y_pos, addr_line)
+            y_pos -= 8
+            canvas.drawCentredString(PAGE_W / 2.0, y_pos, legal_line)
+            y_pos -= 8
+            canvas.drawCentredString(PAGE_W / 2.0, y_pos, contact_line)
+            
+        # Footer droite
+        canvas.setFillColor(C_TEXT)
+        canvas.setFont("Helvetica", 7)
+        right_y = 10 * mm
+        if self.reference:
+            canvas.drawRightString(PAGE_W - MARGIN_R, right_y + 4 * mm, self.reference)
         page_str = f"Page {doc.page}"
-        canvas.drawRightString(PAGE_W - MARGIN_R, MARGIN_B - 6 * mm, page_str)
+        canvas.drawRightString(PAGE_W - MARGIN_R, right_y, page_str)
 
         canvas.restoreState()
 
@@ -327,6 +359,7 @@ class QuotePDFGenerator:
             self.data.company,
             self._is_draft,
             self.data.company.footer_text,
+            self.data.reference
         )
 
         doc = SimpleDocTemplate(
@@ -368,36 +401,44 @@ class QuotePDFGenerator:
             left_parts.append(logo)
             left_parts.append(Spacer(1, 3 * mm))
 
-        left_parts.append(Paragraph(company.name or "Votre entreprise", st["company_name"]))
+        if company.header_text:
+            lines = [l.strip() for l in company.header_text.split('\n') if l.strip()]
+            if lines:
+                left_parts.append(Paragraph(lines[0], st["company_name"]))
+                if len(lines) > 1:
+                    rest = "<br/>".join(lines[1:])
+                    left_parts.append(Paragraph(rest, st["company_detail"]))
+        else:
+            left_parts.append(Paragraph(company.name or "Votre entreprise", st["company_name"]))
 
-        addr_parts = []
-        if company.address:
-            addr_parts.append(company.address)
-        city_line = " ".join(filter(None, [company.postal_code, company.city]))
-        if city_line:
-            addr_parts.append(city_line)
-        if company.country and company.country != "France":
-            addr_parts.append(company.country)
-        if addr_parts:
-            left_parts.append(Paragraph("<br/>".join(addr_parts), st["company_detail"]))
+            addr_parts = []
+            if company.address:
+                addr_parts.append(company.address)
+            city_line = " ".join(filter(None, [company.postal_code, company.city]))
+            if city_line:
+                addr_parts.append(city_line)
+            if company.country and company.country != "France":
+                addr_parts.append(company.country)
+            if addr_parts:
+                left_parts.append(Paragraph("<br/>".join(addr_parts), st["company_detail"]))
 
-        contact_parts = []
-        if company.phone:
-            contact_parts.append(f"Tél : {company.phone}")
-        if company.email:
-            contact_parts.append(f"Email : {company.email}")
-        if company.website:
-            contact_parts.append(company.website)
-        if contact_parts:
-            left_parts.append(Paragraph("  ·  ".join(contact_parts), st["company_muted"]))
+            contact_parts = []
+            if company.phone:
+                contact_parts.append(f"Tél : {company.phone}")
+            if company.email:
+                contact_parts.append(f"Email : {company.email}")
+            if company.website:
+                contact_parts.append(company.website)
+            if contact_parts:
+                left_parts.append(Paragraph("  ·  ".join(contact_parts), st["company_muted"]))
 
-        legal_parts = []
-        if company.siret:
-            legal_parts.append(f"SIRET : {company.siret}")
-        if company.vat_number and company.vat_subject:
-            legal_parts.append(f"TVA : {company.vat_number}")
-        if legal_parts:
-            left_parts.append(Paragraph("  ─  ".join(legal_parts), st["company_muted"]))
+            legal_parts = []
+            if company.siret:
+                legal_parts.append(f"SIRET : {company.siret}")
+            if company.vat_number and company.vat_subject:
+                legal_parts.append(f"TVA : {company.vat_number}")
+            if legal_parts:
+                left_parts.append(Paragraph("  ─  ".join(legal_parts), st["company_muted"]))
 
         rcs_parts = []
         if company.rcs_city:
@@ -993,9 +1034,26 @@ class QuotePDFGenerator:
         st = self.styles
         parts: list[Any] = []
 
-        if self.data.notes:
+        # Add notes AND Bank info
+        has_notes = bool(self.data.notes)
+        has_bank = bool(self.data.company.iban)
+        
+        if has_notes or has_bank:
             parts.append(Paragraph("Notes", ParagraphStyle("notes_h", parent=st["block_title"], fontSize=8.5, textColor=C_TEXT)))
-            parts.append(Paragraph(self.data.notes.replace("\n", "<br/>"), st["address_detail"]))
+            if has_notes:
+                parts.append(Paragraph(self.data.notes.replace("\n", "<br/>"), st["address_detail"]))
+            
+            if has_bank:
+                co = self.data.company
+                bank_lines = []
+                bank_lines.append(f"Titulaire du compte <b>{co.name}</b>")
+                if co.iban: bank_lines.append(f"IBAN {co.iban}")
+                if co.bic: bank_lines.append(f"BIC {co.bic}")
+                bank_text = "<br/>".join(bank_lines)
+                
+                parts.append(Spacer(1, 2 * mm))
+                parts.append(Paragraph(bank_text, st["address_detail"]))
+                
             parts.append(Spacer(1, 4 * mm))
 
         if self.data.conditions:

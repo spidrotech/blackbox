@@ -7,8 +7,10 @@ from decimal import Decimal
 from app.db.session import get_session
 from app.models import (
     PriceLibraryItem, PriceLibraryItemCreate, PriceLibraryItemUpdate,
+    PriceLibraryImportRequest,
     User
 )
+from app.models.enums import LineItemType
 from app.core.security import get_current_user_required
 
 router = APIRouter()
@@ -247,6 +249,99 @@ def create_item(
     }
 
 
+@router.post("/import", response_model=dict)
+def import_items(
+    payload: PriceLibraryImportRequest,
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session),
+):
+    """Importe une liste d'articles (migration Obat/CSV/JSON)."""
+    created_count = 0
+    updated_count = 0
+    skipped_count = 0
+
+    for raw_item in payload.items:
+        name = (raw_item.name or "").strip()
+        if not name:
+            skipped_count += 1
+            continue
+
+        unit = raw_item.unit or "u"
+        item_type = raw_item.item_type or LineItemType.SUPPLY
+        reference = (raw_item.reference or "").strip() or None
+
+        existing_item = None
+        if payload.upsert:
+            by_ref_stmt = None
+            if reference:
+                by_ref_stmt = select(PriceLibraryItem).where(
+                    PriceLibraryItem.company_id == current_user.company_id,
+                    PriceLibraryItem.reference == reference,
+                )
+                existing_item = session.exec(by_ref_stmt).first()
+
+            if not existing_item:
+                by_name_stmt = select(PriceLibraryItem).where(
+                    PriceLibraryItem.company_id == current_user.company_id,
+                    PriceLibraryItem.name == name,
+                    PriceLibraryItem.unit == unit,
+                    PriceLibraryItem.item_type == item_type,
+                )
+                existing_item = session.exec(by_name_stmt).first()
+
+        if existing_item:
+            existing_item.description = raw_item.description or existing_item.description
+            existing_item.long_description = raw_item.long_description or existing_item.long_description
+            existing_item.item_type = item_type
+            existing_item.category = raw_item.category or existing_item.category
+            existing_item.subcategory = raw_item.subcategory or existing_item.subcategory
+            existing_item.trade = raw_item.trade or existing_item.trade
+            existing_item.unit = unit
+            existing_item.unit_price = raw_item.unit_price
+            existing_item.tax_rate = raw_item.tax_rate or existing_item.tax_rate
+            existing_item.reference = reference or existing_item.reference
+            existing_item.brand = raw_item.brand or existing_item.brand
+            existing_item.cost_price = raw_item.cost_price or existing_item.cost_price
+            existing_item.is_active = True
+            existing_item.updated_at = datetime.utcnow()
+            session.add(existing_item)
+            updated_count += 1
+            continue
+
+        new_item = PriceLibraryItem(
+            company_id=current_user.company_id,
+            name=name,
+            description=raw_item.description,
+            long_description=raw_item.long_description,
+            item_type=item_type,
+            category=raw_item.category,
+            subcategory=raw_item.subcategory,
+            trade=raw_item.trade,
+            unit=unit,
+            unit_price=raw_item.unit_price,
+            tax_rate=raw_item.tax_rate or Decimal("20.00"),
+            reference=reference,
+            brand=raw_item.brand,
+            cost_price=raw_item.cost_price,
+            is_active=True,
+        )
+        session.add(new_item)
+        created_count += 1
+
+    session.commit()
+
+    return {
+        "success": True,
+        "message": "Import bibliothèque terminé",
+        "data": {
+            "created": created_count,
+            "updated": updated_count,
+            "skipped": skipped_count,
+            "total": len(payload.items),
+        },
+    }
+
+
 @router.put("/{item_id}", response_model=dict)
 def update_item(
     item_id: int,
@@ -372,3 +467,91 @@ def delete_item(
     session.commit()
     
     return {"success": True, "message": "Article supprimé"}
+
+
+# ─── Seed: 25 articles courants du bâtiment ─────────────────────────
+
+SEED_ITEMS = [
+    # Plomberie
+    {"name": "Fourniture et pose robinet mitigeur", "description": "Robinet mitigeur chrome cuisine ou salle de bain", "trade": "Plomberie", "category": "Fourniture", "unit": "u", "unit_price": "185.00", "item_type": "supply"},
+    {"name": "Remplacement chauffe-eau 200L", "description": "Dépose ancien + fourniture et pose chauffe-eau électrique 200L", "trade": "Plomberie", "category": "Travaux", "unit": "u", "unit_price": "890.00", "item_type": "work"},
+    {"name": "Création point d'eau", "description": "Tirage alimentation eau chaude/froide + évacuation PVC", "trade": "Plomberie", "category": "Travaux", "unit": "u", "unit_price": "450.00", "item_type": "work"},
+    # Électricité
+    {"name": "Pose prise électrique 16A", "description": "Fourniture et pose prise de courant 16A encastrée + câblage", "trade": "Électricité", "category": "Fourniture", "unit": "u", "unit_price": "95.00", "item_type": "work"},
+    {"name": "Tableau électrique 2 rangées", "description": "Fourniture et pose tableau pré-équipé 2 rangées, mise aux normes NF C 15-100", "trade": "Électricité", "category": "Travaux", "unit": "u", "unit_price": "1250.00", "item_type": "work"},
+    {"name": "Pose interrupteur va-et-vient", "description": "Fourniture et pose interrupteur va-et-vient encastré", "trade": "Électricité", "category": "Fourniture", "unit": "u", "unit_price": "75.00", "item_type": "work"},
+    # Maçonnerie
+    {"name": "Ouverture mur porteur", "description": "Ouverture dans mur porteur avec pose IPN, reprise enduit", "trade": "Maçonnerie", "category": "Travaux", "unit": "ml", "unit_price": "850.00", "item_type": "work"},
+    {"name": "Montage cloison briques", "description": "Montage cloison en briques plâtrières 5cm, enduit 2 faces", "trade": "Maçonnerie", "category": "Travaux", "unit": "m²", "unit_price": "65.00", "item_type": "work"},
+    {"name": "Coulage dalle béton", "description": "Coulage dalle béton armé épaisseur 12cm, treillis soudé", "trade": "Maçonnerie", "category": "Travaux", "unit": "m²", "unit_price": "95.00", "item_type": "work"},
+    # Peinture
+    {"name": "Peinture murs et plafonds", "description": "Préparation + 2 couches peinture acrylique mat/satin", "trade": "Peinture", "category": "Travaux", "unit": "m²", "unit_price": "28.00", "item_type": "labor"},
+    {"name": "Enduit de lissage", "description": "Application enduit de lissage sur murs et plafonds, ponçage", "trade": "Peinture", "category": "Travaux", "unit": "m²", "unit_price": "18.00", "item_type": "labor"},
+    # Menuiserie
+    {"name": "Pose porte intérieure", "description": "Fourniture et pose bloc-porte isoplane bois 83cm", "trade": "Menuiserie", "category": "Fourniture", "unit": "u", "unit_price": "380.00", "item_type": "work"},
+    {"name": "Pose fenêtre PVC double vitrage", "description": "Dépose ancienne + fourniture et pose fenêtre PVC 2 vantaux DV, finitions", "trade": "Menuiserie", "category": "Travaux", "unit": "u", "unit_price": "650.00", "item_type": "work"},
+    # Carrelage
+    {"name": "Pose carrelage sol intérieur", "description": "Fourniture et pose carrelage grès cérame 60×60, colle + joints", "trade": "Carrelage", "category": "Travaux", "unit": "m²", "unit_price": "75.00", "item_type": "work"},
+    {"name": "Pose faïence murale", "description": "Fourniture et pose faïence murale 30×60, joint fin", "trade": "Carrelage", "category": "Travaux", "unit": "m²", "unit_price": "68.00", "item_type": "work"},
+    # Isolation
+    {"name": "Isolation combles laine soufflée", "description": "Isolation combles perdus par soufflage laine minérale R=7", "trade": "Isolation", "category": "Travaux", "unit": "m²", "unit_price": "32.00", "item_type": "work"},
+    {"name": "Doublage isolant murs", "description": "Pose doublage plaque de plâtre + isolant polystyrène 10+80", "trade": "Isolation", "category": "Travaux", "unit": "m²", "unit_price": "48.00", "item_type": "work"},
+    # Plâtrerie
+    {"name": "Faux plafond BA13 sur ossature", "description": "Plafond suspendu plaque BA13 sur ossature métallique, bandes + enduit", "trade": "Plâtrerie", "category": "Travaux", "unit": "m²", "unit_price": "52.00", "item_type": "work"},
+    {"name": "Cloison placo BA13", "description": "Cloison plaque de plâtre BA13 sur ossature 48mm, bandes + enduit 2 faces", "trade": "Plâtrerie", "category": "Travaux", "unit": "m²", "unit_price": "55.00", "item_type": "work"},
+    # Toiture
+    {"name": "Réfection couverture tuiles", "description": "Dépose + fourniture et pose tuiles terre cuite, liteaux, sous-toiture", "trade": "Toiture", "category": "Travaux", "unit": "m²", "unit_price": "120.00", "item_type": "work"},
+    {"name": "Zinguerie gouttière", "description": "Fourniture et pose gouttière aluminium laqué + descente", "trade": "Toiture", "category": "Fourniture", "unit": "ml", "unit_price": "45.00", "item_type": "supply"},
+    # Chauffage / CVC
+    {"name": "Pose radiateur électrique", "description": "Fourniture et pose radiateur à inertie 1500W, raccordement", "trade": "Chauffage", "category": "Fourniture", "unit": "u", "unit_price": "480.00", "item_type": "work"},
+    {"name": "Installation climatisation split", "description": "Fourniture et pose unité intérieure + extérieure mono-split, mise en service", "trade": "Chauffage", "category": "Travaux", "unit": "u", "unit_price": "2200.00", "item_type": "work"},
+    # Revêtement de sol
+    {"name": "Pose parquet flottant", "description": "Fourniture et pose parquet stratifié aspect chêne, sous-couche incluse", "trade": "Revêtement de sol", "category": "Travaux", "unit": "m²", "unit_price": "42.00", "item_type": "work"},
+    # Démolition
+    {"name": "Démolition cloison", "description": "Démolition cloison légère, évacuation gravats", "trade": "Démolition", "category": "Travaux", "unit": "m²", "unit_price": "22.00", "item_type": "labor"},
+    # Main d'œuvre
+    {"name": "Main d'œuvre qualifiée BTP", "description": "Heure de main d'œuvre ouvrier qualifié tous corps d'état", "trade": "Main d'œuvre", "category": "Main d'œuvre", "unit": "h", "unit_price": "45.00", "item_type": "labor"},
+]
+
+
+@router.post("/seed", response_model=dict)
+def seed_library(
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session),
+):
+    """Insère les articles standards du bâtiment dans la bibliothèque de prix"""
+    from app.models.enums import LineItemType
+
+    created = 0
+    for item_data in SEED_ITEMS:
+        # Skip si un article avec le même nom existe déjà
+        existing = session.exec(
+            select(PriceLibraryItem).where(
+                PriceLibraryItem.company_id == current_user.company_id,
+                PriceLibraryItem.name == item_data["name"],
+            )
+        ).first()
+        if existing:
+            continue
+
+        item = PriceLibraryItem(
+            company_id=current_user.company_id,
+            name=item_data["name"],
+            description=item_data["description"],
+            trade=item_data.get("trade"),
+            category=item_data.get("category"),
+            unit=item_data.get("unit", "u"),
+            unit_price=Decimal(item_data["unit_price"]),
+            tax_rate=Decimal("20.00"),
+            item_type=LineItemType(item_data.get("item_type", "supply")),
+        )
+        session.add(item)
+        created += 1
+
+    session.commit()
+
+    return {
+        "success": True,
+        "message": f"{created} articles ajoutés à la bibliothèque",
+        "data": {"created": created, "total_seed": len(SEED_ITEMS)},
+    }

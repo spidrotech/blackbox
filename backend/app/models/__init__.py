@@ -34,7 +34,14 @@ from .supplier import Supplier, SupplierCreate, SupplierRead, SupplierUpdate
 from .purchase import Purchase, PurchaseCreate, PurchaseRead, PurchaseUpdate, PurchasePayment
 from .time_entry import TimeEntry, TimeEntryCreate, TimeEntryRead, TimeEntryUpdate
 from .equipment import Equipment, EquipmentCreate, EquipmentRead, EquipmentUpdate, EquipmentUsage
-from .price_library import PriceLibraryItem, PriceLibraryItemCreate, PriceLibraryItemRead, PriceLibraryItemUpdate
+from .price_library import (
+    PriceLibraryItem,
+    PriceLibraryItemCreate,
+    PriceLibraryItemRead,
+    PriceLibraryItemUpdate,
+    PriceLibraryImportItem,
+    PriceLibraryImportRequest,
+)
 
 __all__ = [
     # Enums
@@ -109,4 +116,6 @@ __all__ = [
     "PriceLibraryItemCreate",
     "PriceLibraryItemRead",
     "PriceLibraryItemUpdate",
+    "PriceLibraryImportItem",
+    "PriceLibraryImportRequest",
 ]

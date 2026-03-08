@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select, Modal } from '@/components/ui';
@@ -11,6 +11,7 @@ import { quoteService, customerService, projectService, priceLibraryService, set
 import { QuoteCreate, Customer, Project, PriceLibraryItem, LineItem, LineItemType } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { LineItemsEditor, LineItemData } from '@/components/quotes/LineItemsEditor';
+import { PdfSettingsCard } from '@/components/documents/PdfSettingsCard';
 import {
   CompanySettingsData,
   getDocumentDefaultsFromCompany,
@@ -50,6 +51,8 @@ export default function NewQuotePage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [priceLibrary, setPriceLibrary] = useState<PriceLibraryItem[]>([]);
+  const [priceSearch, setPriceSearch] = useState('');
+  const [companySettings, setCompanySettings] = useState<CompanySettingsData | null>(null);
 
   const [formData, setFormData] = useState<QuoteCreate>({
     customer_id: 0,
@@ -75,14 +78,21 @@ export default function NewQuotePage() {
   const [lineItems, setLineItems] = useState<LineItemData[]>([]);
 
   const addFromLibrary = (item: PriceLibraryItem) => {
+    const details = [
+      item.description,
+      item.long_description,
+      item.brand ? `Marque : ${item.brand}` : undefined,
+    ].filter(Boolean).join('\n');
+
     setLineItems(prev => [...prev, {
       description: item.name || item.description || '',
-      long_description: item.description || '',
+      long_description: details || undefined,
       item_type: item.item_type || 'supply',
       quantity: 1,
       unit: item.unit || 'u',
       unit_price: item.unit_price || 0,
       vat_rate: item.tax_rate || 20,
+      reference: item.reference,
     }]);
     priceLibraryService.recordUsage(item.id);
   };
@@ -104,14 +114,16 @@ export default function NewQuotePage() {
       const [customersRes, projectsRes, priceRes, companyRes] = await Promise.all([
         customerService.getAll(),
         projectService.getAll(),
-        priceLibraryService.getFavorites(),
+        priceLibraryService.getAll(),
         settingsService.getCompany(),
       ]);
       if (customersRes.success) setCustomers(Array.isArray(customersRes.data) ? customersRes.data : []);
       if (projectsRes.success) setProjects(Array.isArray(projectsRes.data) ? projectsRes.data : []);
       if (priceRes.success) setPriceLibrary(Array.isArray(priceRes.data) ? priceRes.data : []);
       if (companyRes.success && companyRes.data) {
-        const defaults = getDocumentDefaultsFromCompany(companyRes.data as CompanySettingsData);
+        const companyData = companyRes.data as CompanySettingsData;
+        setCompanySettings(companyData);
+        const defaults = getDocumentDefaultsFromCompany(companyData);
         setFormData(prev => ({
           ...prev,
           conditions: prev.conditions || defaults.conditions,
@@ -119,6 +131,7 @@ export default function NewQuotePage() {
           payment_terms: prev.payment_terms || defaults.paymentTerms,
           bank_details: prev.bank_details || defaults.bankDetails,
           legal_mentions: prev.legal_mentions || defaults.legalMentions,
+          footer_notes: prev.footer_notes || defaults.footerNotes,
         }));
       }
     } catch (error) {
@@ -210,6 +223,16 @@ export default function NewQuotePage() {
 
   const totals = calculateTotals();
   const allSections = [...new Set(lineItems.map(i => i.section).filter(Boolean))];
+  const filteredPriceLibrary = useMemo(() => {
+    const query = priceSearch.trim().toLowerCase();
+    const source = [...priceLibrary].sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0));
+    if (!query) return source.slice(0, 12);
+    return source.filter((item) =>
+      [item.name, item.reference, item.description, item.long_description, item.brand]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
+    ).slice(0, 12);
+  }, [priceLibrary, priceSearch]);
 
   return (
     <MainLayout>
@@ -249,6 +272,10 @@ export default function NewQuotePage() {
         </div>
 
         <div className="max-w-[1400px] mx-auto px-6 py-6">
+          <div className="mb-6">
+            <PdfSettingsCard company={companySettings} documentLabel="devis" />
+          </div>
+
           <form id="quote-form" onSubmit={handleSubmit}>
             <div className="grid gap-6" style={{ gridTemplateColumns: '1fr 420px' }}>
 
@@ -332,11 +359,18 @@ export default function NewQuotePage() {
                     {priceLibrary.length > 0 && (
                       <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
                         <p className="text-xs font-semibold text-amber-800 mb-2">Bibliothèque de prix</p>
+                        <input
+                          type="text"
+                          value={priceSearch}
+                          onChange={(e) => setPriceSearch(e.target.value)}
+                          placeholder="Rechercher BAR-TH-171, PAC, marque..."
+                          className="w-full mb-2 rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                        />
                         <div className="flex flex-wrap gap-1.5">
-                          {priceLibrary.slice(0, 8).map(item => (
+                          {filteredPriceLibrary.map(item => (
                             <button key={item.id} type="button" onClick={() => addFromLibrary(item)}
                               className="px-2.5 py-1 text-xs bg-white border border-amber-200 rounded-full hover:bg-amber-100 transition-colors">
-                              {item.name}
+                              {item.reference ? `${item.reference} — ` : ''}{item.name}
                             </button>
                           ))}
                         </div>
@@ -384,7 +418,7 @@ export default function NewQuotePage() {
                 <Card>
                   <CardHeader><CardTitle className="text-base flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-xs font-bold">6</span>
-                    Notes et Conditions
+                    Contenu visible sur le PDF
                   </CardTitle></CardHeader>
                   <CardContent className="space-y-4">
                     <div>
@@ -400,6 +434,10 @@ export default function NewQuotePage() {
                         className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                         value={formData.conditions || ''} onChange={handleChange}
                         placeholder="CGV apparaissant sur le devis PDF..." />
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                      Le pied de page, les mentions légales et les coordonnées bancaires sont pilotés depuis les
+                      paramètres PDF pour éviter les doubles saisies.
                     </div>
                   </CardContent>
                 </Card>
@@ -475,7 +513,13 @@ export default function NewQuotePage() {
                 <Card>
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-base">Apercu PDF</CardTitle>
+                      <div className="flex items-center gap-3">
+                        <CardTitle className="text-base">Aperçu PDF</CardTitle>
+                        <button type="button" onClick={() => window.open('/settings?tab=documents&doc=entetes', '_blank')} className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1" title="Modifier l'en-tête et le pied de page du document">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                          Paramètres du PDF
+                        </button>
+                      </div>
                       {pdfLoading && (
                         <div className="flex items-center gap-1.5 text-xs text-slate-400">
                           <div className="w-3 h-3 border-2 border-blue-200 border-t-blue-500 rounded-full animate-spin" />

@@ -1,6 +1,7 @@
 from sqlmodel import SQLModel, Field, Relationship
 from typing import Optional, List, TYPE_CHECKING
 from datetime import datetime
+from sqlalchemy import Column, Text
 
 if TYPE_CHECKING:
     from .user import User
@@ -59,9 +60,9 @@ class Company(SQLModel, table=True):
     next_quote_number: int = Field(default=1)
     
     # Mentions légales par défaut
-    default_payment_terms: Optional[str] = Field(default=None)
-    default_conditions: Optional[str] = Field(default=None)
-    legal_mentions: Optional[str] = Field(default=None)
+    default_payment_terms: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    default_conditions: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    legal_mentions: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     
     owner_id: Optional[int] = Field(default=None, foreign_key="users.id")
     

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Badge, Button, Input, Select } from '@/components/ui';
 import { priceLibraryService } from '@/services/api';
-import { PriceLibraryItem } from '@/types';
+import { PriceLibraryItem, PriceLibraryItemCreate } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { buildEditPath } from '@/lib/routes';
 
@@ -23,6 +23,8 @@ export default function PriceLibraryPage() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [importLoading, setImportLoading] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -93,6 +95,101 @@ export default function PriceLibraryPage() {
     }
   };
 
+  const parseNumber = (value: unknown, fallback: number): number => {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
+    if (typeof value !== 'string') return fallback;
+    const normalized = value.replace(/\s/g, '').replace(/€/g, '').replace(',', '.');
+    const parsed = parseFloat(normalized);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+
+  const normalizeItem = (row: Record<string, unknown>) => {
+    const name = String(row.name || row.designation || row.description || '').trim();
+    if (!name) return null;
+    const itemTypeRaw = String(row.item_type || row.itemType || row.type || 'supply').toLowerCase();
+    const itemType = itemTypeRaw === 'labor' || itemTypeRaw === 'other' ? itemTypeRaw : 'supply';
+
+    return {
+      name,
+      description: String(row.description || row.designation || name),
+      long_description: String(row.long_description || row.longDescription || row.details || '').trim() || undefined,
+      item_type: itemType,
+      category: String(row.category || '').trim() || undefined,
+      subcategory: String(row.subcategory || '').trim() || undefined,
+      trade: String(row.trade || '').trim() || undefined,
+      unit: String(row.unit || 'u').trim() || 'u',
+      unit_price: parseNumber(row.unit_price ?? row.unitPrice ?? row.pu_ht ?? row.pu ?? row.price, 0),
+      tax_rate: parseNumber(row.tax_rate ?? row.taxRate ?? row.vat_rate ?? row.tva ?? 20, 20),
+      reference: String(row.reference || row.ref || '').trim() || undefined,
+      brand: String(row.brand || '').trim() || undefined,
+      cost_price: parseNumber(row.cost_price ?? row.costPrice ?? '', 0) || undefined,
+    };
+  };
+
+  const parseCsv = (text: string): Record<string, unknown>[] => {
+    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(';').length >= lines[0].split(',').length
+      ? lines[0].split(';').map((h) => h.trim())
+      : lines[0].split(',').map((h) => h.trim());
+    const delimiter = lines[0].includes(';') ? ';' : ',';
+
+    return lines.slice(1).map((line) => {
+      const cols = line.split(delimiter).map((col) => col.trim());
+      return headers.reduce<Record<string, unknown>>((acc, header, idx) => {
+        acc[header] = cols[idx] ?? '';
+        return acc;
+      }, {});
+    });
+  };
+
+  const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setImportLoading(true);
+    setImportMessage(null);
+    try {
+      const content = await file.text();
+      const isJson = file.name.toLowerCase().endsWith('.json');
+      let rawRows: unknown[] = [];
+      if (isJson) {
+        const parsed = JSON.parse(content);
+        rawRows = Array.isArray(parsed) ? parsed : [];
+      } else {
+        rawRows = parseCsv(content);
+      }
+
+      const items = rawRows
+        .map((row) => normalizeItem(row as Record<string, unknown>))
+        .filter(Boolean) as PriceLibraryItemCreate[];
+
+      if (!items.length) {
+        setImportMessage('Aucune ligne valide à importer.');
+        return;
+      }
+
+      const res = await priceLibraryService.importItems({
+        items,
+        upsert: true,
+      });
+
+      if (res.success && res.data) {
+        const stats = res.data;
+        setImportMessage(`Import terminé: ${stats.created} créés, ${stats.updated} mis à jour, ${stats.skipped} ignorés.`);
+        await loadData();
+      } else {
+        setImportMessage('Import échoué.');
+      }
+    } catch (error) {
+      console.error('Import error:', error);
+      setImportMessage('Fichier invalide (JSON/CSV) ou format non reconnu.');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <MainLayout>
@@ -112,15 +209,34 @@ export default function PriceLibraryPage() {
             <h1 className="text-2xl font-bold text-gray-900">Bibliothèque de prix</h1>
             <p className="text-gray-500">{items.length} élément(s) au total</p>
           </div>
-          <Link href="/price-library/new">
-            <Button>
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Nouvel élément
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <label className="inline-flex">
+              <input
+                type="file"
+                accept=".json,.csv"
+                className="hidden"
+                onChange={handleImportFile}
+              />
+              <Button type="button" variant="outline" loading={importLoading}>
+                Importer JSON/CSV
+              </Button>
+            </label>
+            <Link href="/price-library/new">
+              <Button>
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Nouvel élément
+              </Button>
+            </Link>
+          </div>
         </div>
+
+        {importMessage && (
+          <Card>
+            <CardContent className="p-3 text-sm text-gray-700">{importMessage}</CardContent>
+          </Card>
+        )}
 
         {/* Filters */}
         <Card>

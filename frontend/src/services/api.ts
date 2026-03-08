@@ -24,6 +24,8 @@ import {
   EquipmentCreate,
   PriceLibraryItem,
   PriceLibraryItemCreate,
+  PriceLibraryImportPayload,
+  PriceLibraryImportResult,
   DashboardData,
 } from '@/types';
 
@@ -417,6 +419,40 @@ export const invoiceService = {
     link.remove();
     window.URL.revokeObjectURL(url);
   },
+
+  async duplicate(id: number): Promise<ApiResponse<Invoice>> {
+    const response = await api.post<ApiResponse<Invoice>>(`/invoices/${id}/duplicate`);
+    return response.data;
+  },
+
+  async createCreditNote(id: number): Promise<ApiResponse<Invoice>> {
+    const response = await api.post<ApiResponse<Invoice>>(`/invoices/${id}/credit-note`);
+    return response.data;
+  },
+
+  async downloadFacturxPdf(id: number, reference: string): Promise<void> {
+    const response = await api.get(`/invoices/${id}/facturx-pdf`, { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${reference}-facturx.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  async downloadFacturxXml(id: number, reference: string): Promise<void> {
+    const response = await api.get(`/invoices/${id}/facturx-xml`, { responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/xml' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `facturx-${reference}.xml`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
 };
 
 // Supplier Service
@@ -670,6 +706,11 @@ export const priceLibraryService = {
 
   async recordUsage(id: number): Promise<ApiResponse<PriceLibraryItem>> {
     const response = await api.post<ApiResponse<PriceLibraryItem>>(`/price-library/${id}/use`);
+    return response.data;
+  },
+
+  async importItems(payload: PriceLibraryImportPayload): Promise<ApiResponse<PriceLibraryImportResult>> {
+    const response = await api.post<ApiResponse<PriceLibraryImportResult>>('/price-library/import', payload);
     return response.data;
   },
 };

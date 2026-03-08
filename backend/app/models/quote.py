@@ -2,7 +2,7 @@ from sqlmodel import SQLModel, Field, Relationship
 from typing import Optional, List, TYPE_CHECKING
 from datetime import date, datetime
 from decimal import Decimal
-from sqlalchemy import JSON
+from sqlalchemy import JSON, Column, Text
 
 from .enums import QuoteStatus
 
@@ -56,14 +56,14 @@ class Quote(SQLModel, table=True):
     mpr_premium: Optional[Decimal] = Field(default=None, max_digits=10, decimal_places=2)
 
     # Informations supplémentaires
-    bank_details: Optional[str] = Field(default=None)
-    footer_notes: Optional[str] = Field(default=None)
-    payment_methods: Optional[str] = Field(default=None)  # JSON array as string
-    legal_mentions: Optional[str] = Field(default=None)
-    
-    notes: Optional[str] = Field(default=None)
-    payment_terms: Optional[str] = Field(default=None)
-    conditions: Optional[str] = Field(default=None)
+    bank_details: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    footer_notes: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    payment_methods: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))  # JSON array as string
+    legal_mentions: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+
+    notes: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    payment_terms: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    conditions: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     
     created_by_id: Optional[int] = Field(default=None, foreign_key="users.id")
     

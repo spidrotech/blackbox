@@ -20,6 +20,11 @@ from app.services.pdf_service import (
     QuoteData,
     generate_invoice_pdf,
 )
+from app.services.facturx_service import (
+    HAS_FACTURX,
+    generate_facturx_pdf,
+    build_facturx_invoice_from_db,
+)
 
 router = APIRouter()
 
@@ -381,13 +386,27 @@ def add_payment(
     invoice = session.get(Invoice, invoice_id)
     if not invoice or invoice.company_id != current_user.company_id:
         raise HTTPException(status_code=404, detail="Facture non trouvée")
-    
+
+    if payment.amount <= 0:
+        raise HTTPException(status_code=400, detail="Le montant du paiement doit être supérieur à 0")
+
+    # Calcule le total TTC courant de la facture
+    response_before = get_invoice_response(invoice, session)
+    total_ttc = Decimal(str(response_before["totalTtc"]))
     current_paid = invoice.amount_paid or Decimal(0)
-    invoice.amount_paid = current_paid + payment.amount
+    remaining_before = max(total_ttc - current_paid, Decimal(0))
+
+    # Idempotence : déjà soldée -> ne pas cumuler un nouveau paiement
+    if invoice.status == InvoiceStatus.PAID or remaining_before <= 0:
+        return {
+            "success": True,
+            "invoice": get_invoice_response(invoice, session),
+            "message": "Facture déjà soldée",
+        }
     
-    # Récupérer le total pour vérifier si payée complètement
-    response = get_invoice_response(invoice, session)
-    total_ttc = Decimal(str(response["totalTtc"]))
+    # Empêche tout dépassement en cas de double clic / double requête
+    applied_amount = min(payment.amount, remaining_before)
+    invoice.amount_paid = current_paid + applied_amount
     
     if invoice.amount_paid >= total_ttc:
         invoice.status = InvoiceStatus.PAID
@@ -479,6 +498,146 @@ def delete_invoice(
     session.commit()
     
     return {"success": True, "message": "Facture supprimée"}
+
+
+@router.post("/{invoice_id}/duplicate", response_model=dict)
+def duplicate_invoice(
+    invoice_id: int,
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session),
+):
+    """Duplique une facture en créant un nouveau brouillon"""
+    original = session.get(Invoice, invoice_id)
+    if not original or original.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+
+    company_id = current_user.company_id or original.company_id
+    new_reference = generate_invoice_reference(session, company_id)
+
+    new_invoice = Invoice(
+        company_id=company_id,
+        customer_id=original.customer_id,
+        project_id=original.project_id,
+        quote_id=original.quote_id,
+        reference=new_reference,
+        status=InvoiceStatus.DRAFT,
+        description=original.description,
+        invoice_date=date.today(),
+        due_date=date.today() + timedelta(days=30),
+        notes=original.notes,
+        payment_terms=original.payment_terms,
+        bank_details=original.bank_details,
+        purchase_order=original.purchase_order,
+        conditions=original.conditions,
+        invoice_type=original.invoice_type,
+        global_discount=original.global_discount,
+        global_discount_percent=original.global_discount_percent,
+        created_by_id=current_user.id,
+    )
+    session.add(new_invoice)
+    session.commit()
+    session.refresh(new_invoice)
+
+    # Copier les lignes
+    original_items = session.exec(
+        select(LineItem).where(LineItem.invoice_id == original.id).order_by(LineItem.display_order)
+    ).all()
+    for item in original_items:
+        new_item = LineItem(
+            invoice_id=new_invoice.id,
+            description=item.description,
+            long_description=item.long_description,
+            item_type=item.item_type,
+            quantity=item.quantity,
+            unit=item.unit,
+            unit_price=item.unit_price,
+            discount=item.discount,
+            discount_percent=item.discount_percent,
+            tax_rate=item.tax_rate,
+            reference=item.reference,
+            brand=item.brand,
+            model=item.model,
+            display_order=item.display_order,
+        )
+        session.add(new_item)
+    session.commit()
+
+    return {"success": True, "invoice": get_invoice_response(new_invoice, session)}
+
+
+@router.post("/{invoice_id}/credit-note", response_model=dict)
+def create_credit_note(
+    invoice_id: int,
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session),
+):
+    """Crée un avoir (credit note) lié à une facture existante"""
+    original = session.get(Invoice, invoice_id)
+    if not original or original.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+
+    if original.invoice_type == "credit_note":
+        raise HTTPException(status_code=400, detail="Impossible de créer un avoir sur un avoir")
+
+    company = session.get(Company, current_user.company_id)
+    company_id = current_user.company_id or original.company_id
+
+    # Préfixe "AV" pour avoir
+    year = datetime.now().year
+    prefix = "AV"
+    number = company.next_invoice_number if company else 1
+    reference = f"{prefix}{year}{str(number).zfill(4)}"
+    if company:
+        company.next_invoice_number = number + 1
+        session.add(company)
+
+    credit_note = Invoice(
+        company_id=company_id,
+        customer_id=original.customer_id,
+        project_id=original.project_id,
+        quote_id=original.quote_id,
+        reference=reference,
+        status=InvoiceStatus.DRAFT,
+        description=f"Avoir sur facture {original.reference}",
+        invoice_date=date.today(),
+        due_date=date.today() + timedelta(days=30),
+        notes=f"Avoir relatif à la facture {original.reference}",
+        payment_terms=original.payment_terms,
+        bank_details=original.bank_details,
+        conditions=original.conditions,
+        invoice_type="credit_note",
+        original_invoice_id=original.id,
+        created_by_id=current_user.id,
+    )
+    session.add(credit_note)
+    session.commit()
+    session.refresh(credit_note)
+
+    # Copier les lignes en inversant les montants (quantité négative)
+    original_items = session.exec(
+        select(LineItem).where(LineItem.invoice_id == original.id).order_by(LineItem.display_order)
+    ).all()
+    for item in original_items:
+        new_item = LineItem(
+            invoice_id=credit_note.id,
+            description=item.description,
+            long_description=item.long_description,
+            item_type=item.item_type,
+            quantity=-abs(item.quantity),  # Quantité négative pour un avoir
+            unit=item.unit,
+            unit_price=item.unit_price,
+            discount=item.discount,
+            discount_percent=item.discount_percent,
+            tax_rate=item.tax_rate,
+            reference=item.reference,
+            brand=item.brand,
+            model=item.model,
+            display_order=item.display_order,
+        )
+        session.add(new_item)
+    session.commit()
+
+    return {"success": True, "invoice": get_invoice_response(credit_note, session)}
 
 
 @router.get("/{invoice_id}/pdf")
@@ -577,5 +736,172 @@ def download_invoice_pdf(
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="facture-{invoice.reference}.pdf"'
+        },
+    )
+
+
+@router.get("/{invoice_id}/facturx-pdf")
+def download_facturx_pdf(
+    invoice_id: int,
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session),
+):
+    """
+    Génère un PDF Factur-X (PDF/A-3 + XML embarqué) conforme à la norme
+    française de facturation électronique (EN 16931, Factur-X BASIC WL).
+
+    Ce endpoint produit un document légalement valide pour le dépôt sur
+    Chorus Pro ou toute plateforme de dématérialisation partenaire (PDP).
+    """
+    if not HAS_REPORTLAB:
+        raise HTTPException(status_code=500, detail="reportlab non installé.")
+    if not HAS_FACTURX:
+        raise HTTPException(status_code=500, detail="factur-x non installé.")
+
+    invoice = session.get(Invoice, invoice_id)
+    if not invoice or invoice.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+
+    company_obj = session.get(Company, invoice.company_id) if invoice.company_id else None
+    customer_obj = session.get(Customer, invoice.customer_id) if invoice.customer_id else None
+
+    # 1. Générer le PDF classique
+    co = CompanyData()
+    if company_obj:
+        co.name = company_obj.name or ""
+        co.address = company_obj.address or ""
+        co.city = company_obj.city or ""
+        co.postal_code = company_obj.postal_code or ""
+        co.phone = company_obj.phone or ""
+        co.email = company_obj.email or ""
+        co.website = company_obj.website or ""
+        co.siret = company_obj.siret or ""
+        co.vat_number = company_obj.vat_number or ""
+        co.iban = company_obj.iban or ""
+        co.bic = company_obj.bic or ""
+        co.logo_url = company_obj.logo_url or ""
+        co.header_text = company_obj.header_text or ""
+        co.footer_text = company_obj.footer_text or ""
+        co.vat_subject = bool(getattr(company_obj, 'vat_subject', True))
+        co.rcs_city = getattr(company_obj, 'rcs_city', None) or ""
+        co.rm_number = getattr(company_obj, 'rm_number', None) or ""
+        co.capital = float(getattr(company_obj, 'capital', None) or 0)
+        co.ape_code = getattr(company_obj, 'ape_code', None) or ""
+        co.visuals_json = getattr(company_obj, 'visuals_json', None) or ""
+
+    cu = CustomerData()
+    if customer_obj:
+        cu.name = customer_obj.name or ""
+        cu.contact_name = customer_obj.contact_name or ""
+        cu.phone = customer_obj.phone or ""
+        cu.email = customer_obj.email or ""
+
+    db_items = session.exec(
+        select(LineItem).where(LineItem.invoice_id == invoice.id).order_by(LineItem.display_order)
+    ).all()
+
+    pdf_line_items = [
+        LineItemData(
+            designation=item.description or "",
+            long_description=item.long_description or "",
+            section=item.section or "",
+            quantity=float(item.quantity),
+            unit=item.unit or "u",
+            unit_price=float(item.unit_price),
+            discount_percent=float(item.discount_percent or 0),
+            tax_rate=float(item.tax_rate),
+            item_type=item.item_type.value if hasattr(item.item_type, "value") else str(item.item_type),
+            reference=item.reference or "",
+        )
+        for item in db_items
+    ]
+
+    pdf_data = QuoteData(
+        doc_type="invoice",
+        reference=invoice.reference,
+        status=invoice.status.value if hasattr(invoice.status, "value") else str(invoice.status),
+        quote_date=invoice.invoice_date.strftime("%d/%m/%Y") if invoice.invoice_date else "",
+        expiry_date=invoice.due_date.strftime("%d/%m/%Y") if invoice.due_date else "",
+        subject=invoice.description or "",
+        notes=invoice.notes or "",
+        conditions=invoice.conditions or (company_obj.default_conditions if company_obj else "") or "",
+        payment_terms=invoice.payment_terms or (company_obj.default_payment_terms if company_obj else "") or "",
+        bank_details=invoice.bank_details or _default_bank_details(company_obj) or "",
+        legal_mentions=(company_obj.legal_mentions if company_obj else "") or "",
+        line_items=pdf_line_items,
+        company=co,
+        customer=cu,
+    )
+
+    try:
+        base_pdf = generate_invoice_pdf(pdf_data)
+    except Exception as exc:
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {exc}")
+
+    # 2. Construire les données Factur-X et embarquer le XML
+    try:
+        facturx_invoice = build_facturx_invoice_from_db(
+            invoice_obj=invoice,
+            company_obj=company_obj,
+            customer_obj=customer_obj,
+            line_items=db_items,
+        )
+        facturx_bytes = generate_facturx_pdf(base_pdf, facturx_invoice)
+    except Exception as exc:
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Erreur Factur-X : {exc}")
+
+    # 3. Mettre à jour le statut e-invoicing
+    invoice.facturx_status = "generated"
+    invoice.updated_at = datetime.utcnow()
+    session.add(invoice)
+    session.commit()
+
+    type_label = "avoir" if invoice.invoice_type == "credit_note" else "facture"
+    return Response(
+        content=facturx_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{type_label}-{invoice.reference}-facturx.pdf"'
+        },
+    )
+
+
+@router.get("/{invoice_id}/facturx-xml")
+def download_facturx_xml(
+    invoice_id: int,
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session),
+):
+    """Télécharge le XML Factur-X seul (pour envoi via PDP / Chorus Pro)."""
+    invoice = session.get(Invoice, invoice_id)
+    if not invoice or invoice.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+
+    company_obj = session.get(Company, invoice.company_id) if invoice.company_id else None
+    customer_obj = session.get(Customer, invoice.customer_id) if invoice.customer_id else None
+
+    db_items = session.exec(
+        select(LineItem).where(LineItem.invoice_id == invoice.id).order_by(LineItem.display_order)
+    ).all()
+
+    from app.services.facturx_service import generate_facturx_xml
+
+    facturx_invoice = build_facturx_invoice_from_db(
+        invoice_obj=invoice,
+        company_obj=company_obj,
+        customer_obj=customer_obj,
+        line_items=db_items,
+    )
+    xml_bytes = generate_facturx_xml(facturx_invoice)
+
+    return Response(
+        content=xml_bytes,
+        media_type="application/xml",
+        headers={
+            "Content-Disposition": f'attachment; filename="facturx-{invoice.reference}.xml"'
         },
     )

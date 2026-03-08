@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
@@ -10,17 +11,17 @@ import { Quote, Customer, QuoteStats } from '@/types';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { buildDetailPath, buildEditPath } from '@/lib/routes';
 
-const BADGE: Record<string, { label: string; cls: string }> = {
-  draft:     { label: 'Brouillon', cls: 'bg-gray-100 text-gray-600' },
-  sent:      { label: 'Envoyé',    cls: 'bg-blue-100 text-blue-700' },
-  viewed:    { label: 'Consulté',  cls: 'bg-purple-100 text-purple-700' },
-  signed:    { label: 'Signé',     cls: 'bg-green-100 text-green-700' },
-  accepted:  { label: 'Accepté',   cls: 'bg-green-100 text-green-700' },
-  refused:   { label: 'Refusé',    cls: 'bg-red-100 text-red-700' },
-  rejected:  { label: 'Refusé',    cls: 'bg-red-100 text-red-700' },
-  finalized: { label: 'Finalisé',  cls: 'bg-emerald-100 text-emerald-700' },
-  expired:   { label: 'Expiré',    cls: 'bg-orange-100 text-orange-600' },
-  cancelled: { label: 'Annulé',    cls: 'bg-gray-100 text-gray-400' },
+const BADGE: Record<string, { label: string; cls: string; dot: string }> = {
+  draft:     { label: 'Brouillon', cls: 'bg-slate-50 text-slate-600 ring-1 ring-slate-200', dot: 'bg-slate-400' },
+  sent:      { label: 'Envoyé',    cls: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200', dot: 'bg-blue-500' },
+  viewed:    { label: 'Consulté',  cls: 'bg-purple-50 text-purple-700 ring-1 ring-purple-200', dot: 'bg-purple-500' },
+  signed:    { label: 'Signé',     cls: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', dot: 'bg-emerald-500' },
+  accepted:  { label: 'Accepté',   cls: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', dot: 'bg-emerald-500' },
+  refused:   { label: 'Refusé',    cls: 'bg-red-50 text-red-700 ring-1 ring-red-200', dot: 'bg-red-500' },
+  rejected:  { label: 'Refusé',    cls: 'bg-red-50 text-red-700 ring-1 ring-red-200', dot: 'bg-red-500' },
+  finalized: { label: 'Finalisé',  cls: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', dot: 'bg-emerald-500' },
+  expired:   { label: 'Expiré',    cls: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200', dot: 'bg-amber-500' },
+  cancelled: { label: 'Annulé',    cls: 'bg-gray-50 text-gray-500 ring-1 ring-gray-200', dot: 'bg-gray-400' },
 };
 
 const TABS = [
@@ -37,16 +38,16 @@ const TABS = [
 
 function StatCard({ label, value, sub, color = 'blue' }: { label: string; value: string; sub?: string; color?: string }) {
   const colorMap: Record<string, string> = {
-    blue: 'bg-blue-50 border-blue-100 text-blue-700',
-    green: 'bg-green-50 border-green-100 text-green-700',
-    orange: 'bg-orange-50 border-orange-100 text-orange-700',
-    purple: 'bg-purple-50 border-purple-100 text-purple-700',
+    blue: 'from-blue-50 to-white border-blue-100/50 text-blue-700',
+    green: 'from-emerald-50 to-white border-emerald-100/50 text-emerald-700',
+    orange: 'from-amber-50 to-white border-amber-100/50 text-amber-700',
+    purple: 'from-violet-50 to-white border-violet-100/50 text-violet-700',
   };
   return (
-    <div className={`rounded-xl border p-4 ${colorMap[color] || colorMap.blue}`}>
-      <p className="text-xs font-medium opacity-70 uppercase tracking-wide">{label}</p>
-      <p className="text-2xl font-bold mt-1">{value}</p>
-      {sub && <p className="text-xs opacity-60 mt-0.5">{sub}</p>}
+    <div className={`relative overflow-hidden rounded-2xl border p-5 shadow-sm bg-gradient-to-br ${colorMap[color] || colorMap.blue}`}>
+      <p className="text-xs font-semibold opacity-70 uppercase tracking-widest">{label}</p>
+      <p className="text-3xl font-extrabold mt-2 opacity-90">{value}</p>
+      {sub && <p className="text-sm opacity-60 mt-1">{sub}</p>}
     </div>
   );
 }
@@ -202,7 +203,7 @@ export default function QuotesPage() {
             <h1 className="text-2xl font-bold text-gray-900">Devis</h1>
             <p className="text-sm text-gray-500">{quotes.length} devis au total</p>
           </div>
-          <Link href="/quotes/new" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm">
+          <Link href="/quotes/new" className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
             Nouveau devis
           </Link>
@@ -219,53 +220,87 @@ export default function QuotesPage() {
 
         {stats && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">Répartition des statuts</h3>
-              {[
-                { label: 'Brouillon', value: stats.draft, color: 'bg-gray-400' },
-                { label: 'Envoyé', value: stats.sent, color: 'bg-blue-500' },
-                { label: 'Consulté', value: stats.viewed, color: 'bg-purple-500' },
-                { label: 'Accepté', value: stats.accepted + stats.signed + stats.finalized, color: 'bg-emerald-500' },
-                { label: 'Refusé/Expiré', value: stats.rejected + stats.expired + stats.cancelled, color: 'bg-red-400' },
-              ].map(row => {
-                const maxVal = Math.max(stats.total, 1);
-                const width = Math.round((row.value / maxVal) * 100);
-                return (
-                  <div key={row.label} className="mb-2 last:mb-0">
-                    <div className="flex justify-between text-xs text-gray-500 mb-1"><span>{row.label}</span><span>{row.value}</span></div>
-                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className={`h-full ${row.color}`} style={{ width: `${width}%` }} /></div>
-                  </div>
-                );
-              })}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 overflow-hidden">
+              <h3 className="text-sm font-semibold text-slate-800 mb-4">Répartition des statuts</h3>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: 'Brouillon', value: stats.draft, color: '#94a3b8' },
+                        { name: 'Envoyé', value: stats.sent, color: '#3b82f6' },
+                        { name: 'Consulté', value: stats.viewed, color: '#a855f7' },
+                        { name: 'Accepté', value: stats.accepted + stats.signed + stats.finalized, color: '#10b981' },
+                        { name: 'Refusé/Expiré', value: stats.rejected + stats.expired + stats.cancelled, color: '#ef4444' },
+                      ]}
+                      cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={2} dataKey="value"
+                    >
+                      {[{ name: 'Brouillon', value: stats.draft, color: '#94a3b8' }, { name: 'Envoyé', value: stats.sent, color: '#3b82f6' }, { name: 'Consulté', value: stats.viewed, color: '#a855f7' }, { name: 'Accepté', value: stats.accepted + stats.signed + stats.finalized, color: '#10b981' }, { name: 'Refusé/Expiré', value: stats.rejected + stats.expired + stats.cancelled, color: '#ef4444' }].map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div className="bg-white/95 backdrop-blur-sm border border-slate-100 p-3 rounded-xl shadow-lg">
+                            <div className="flex items-center gap-2 text-sm">
+                              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: payload[0].payload.color }} />
+                              <span className="text-slate-600">{payload[0].name}:</span>
+                              <span className="font-bold text-slate-800">{payload[0].value}</span>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">Tunnel de conversion devis</h3>
-              {(() => {
-                const step1 = stats.sent + stats.viewed + stats.signed + stats.accepted + stats.finalized + stats.rejected;
-                const step2 = stats.viewed + stats.signed + stats.accepted + stats.finalized;
-                const step3 = stats.accepted + stats.signed + stats.finalized;
-                const max = Math.max(step1, 1);
-                const s1 = Math.round((step1 / max) * 100);
-                const s2 = Math.round((step2 / max) * 100);
-                const s3 = Math.round((step3 / max) * 100);
-                return (
-                  <div className="space-y-3">
-                    <div>
-                      <div className="flex justify-between text-xs text-gray-500 mb-1"><span>Devis envoyés</span><span>{step1}</span></div>
-                      <div className="h-2 bg-blue-100 rounded"><div className="h-2 bg-blue-500 rounded" style={{ width: `${s1}%` }} /></div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-xs text-gray-500 mb-1"><span>Devis consultés</span><span>{step2}</span></div>
-                      <div className="h-2 bg-purple-100 rounded"><div className="h-2 bg-purple-500 rounded" style={{ width: `${s2}%` }} /></div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-xs text-gray-500 mb-1"><span>Devis gagnés</span><span>{step3}</span></div>
-                      <div className="h-2 bg-emerald-100 rounded"><div className="h-2 bg-emerald-500 rounded" style={{ width: `${s3}%` }} /></div>
-                    </div>
-                  </div>
-                );
-              })()}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 overflow-hidden">
+              <h3 className="text-sm font-semibold text-slate-800 mb-4">Tunnel de conversion devis</h3>
+              <div className="h-64">
+                {(() => {
+                  const step1 = stats.sent + stats.viewed + stats.signed + stats.accepted + stats.finalized + stats.rejected;
+                  const step2 = stats.viewed + stats.signed + stats.accepted + stats.finalized;
+                  const step3 = stats.accepted + stats.signed + stats.finalized;
+                  const data = [
+                    { name: 'Envoyés', value: step1, fill: '#3b82f6' },
+                    { name: 'Consultés', value: step2, fill: '#8b5cf6' },
+                    { name: 'Acceptés', value: step3, fill: '#10b981' }
+                  ];
+                  return (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 30, left: 20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                        <XAxis type="number" hide />
+                        <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 13, fill: '#475569', fontWeight: 500 }} />
+                        <RechartsTooltip cursor={{ fill: '#f8fafc' }} content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            return (
+                              <div className="bg-white/95 backdrop-blur-sm border border-slate-100 p-3 rounded-xl shadow-lg">
+                                <div className="flex items-center gap-2 text-sm">
+                                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: payload[0].payload.fill }} />
+                                  <span className="text-slate-600">{payload[0].payload.name}:</span>
+                                  <span className="font-bold text-slate-800">{payload[0].value}</span>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }} />
+                        <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={32} label={{ position: 'right', fill: '#64748b', fontSize: 12, fontWeight: 600 }}>
+                          {data.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  );
+                })()}
+              </div>
             </div>
           </div>
         )}

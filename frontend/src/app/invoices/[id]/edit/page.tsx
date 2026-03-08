@@ -4,10 +4,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
-import { invoiceService, customerService, projectService } from '@/services/api';
+import { PdfSettingsCard } from '@/components/documents/PdfSettingsCard';
+import { invoiceService, customerService, projectService, settingsService } from '@/services/api';
 import { Customer, InvoiceCreate, LineItem, LineItemType, Project } from '@/types';
 import { LineItemsEditor, LineItemData } from '@/components/quotes/LineItemsEditor';
 import InvoicePreview, { InvoicePreviewData, InvoiceCustomer, InvoiceCompany } from '@/components/invoices/InvoicePreview';
+import { CompanySettingsData, getDocumentDefaultsFromCompany } from '@/lib/company-settings';
 import { buildDetailPath } from '@/lib/routes';
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
@@ -40,6 +42,7 @@ type InvoiceLike = {
   purchaseOrder?: string;
   purchase_order?: string;
   conditions?: string;
+  terms_and_conditions?: string;
   lineItems?: LineItemLike[];
   line_items?: LineItemLike[];
 };
@@ -100,6 +103,7 @@ export default function EditInvoicePage() {
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [companySettings, setCompanySettings] = useState<CompanySettingsData | null>(null);
   const [invoiceCompany, setInvoiceCompany] = useState<InvoiceCompany | null>(null);
   const [invoiceRef, setInvoiceRef] = useState<string | undefined>();
 
@@ -122,11 +126,20 @@ export default function EditInvoicePage() {
   /* ── Load data ─────────────────────────────────────────────────────── */
   const loadData = useCallback(async () => {
     try {
-      const [invoiceRes, customersRes, projectsRes] = await Promise.all([
+      const [invoiceRes, customersRes, projectsRes, settingsRes] = await Promise.all([
         invoiceService.getById(invoiceId),
         customerService.getAll(),
         projectService.getAll(),
+        settingsService.getCompany(),
       ]);
+
+      const companyDefaults = settingsRes.success && settingsRes.data
+        ? getDocumentDefaultsFromCompany(settingsRes.data as CompanySettingsData)
+        : { conditions: '', paymentTerms: '', bankDetails: '', legalMentions: '', footerNotes: '' };
+
+      if (settingsRes.success && settingsRes.data) {
+        setCompanySettings(settingsRes.data as CompanySettingsData);
+      }
 
       if (invoiceRes.success && invoiceRes.data) {
         const inv = invoiceRes.data as InvoiceLike;
@@ -140,10 +153,10 @@ export default function EditInvoicePage() {
           invoice_date: inv.invoiceDate ? inv.invoiceDate.slice(0, 10) : inv.invoice_date?.slice(0, 10) ?? new Date().toISOString().split('T')[0],
           due_date: inv.dueDate ? inv.dueDate.slice(0, 10) : inv.due_date?.slice(0, 10) ?? '',
           notes: inv.notes ?? '',
-          payment_terms: inv.paymentTerms ?? inv.payment_terms ?? '',
-          bank_details: inv.bankDetails ?? inv.bank_details ?? '',
+          payment_terms: inv.paymentTerms ?? inv.payment_terms ?? companyDefaults.paymentTerms,
+          bank_details: inv.bankDetails ?? inv.bank_details ?? companyDefaults.bankDetails,
           purchase_order: inv.purchaseOrder ?? inv.purchase_order ?? '',
-          conditions: inv.conditions ?? '',
+          conditions: inv.conditions ?? inv.terms_and_conditions ?? companyDefaults.conditions,
           discount_percent: 0,
         });
 
@@ -325,6 +338,8 @@ export default function EditInvoicePage() {
           </div>
         </div>
 
+        <PdfSettingsCard company={companySettings} documentLabel="facture" />
+
         {error && (
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
             {error}
@@ -503,18 +518,9 @@ export default function EditInvoicePage() {
                     placeholder="Ex : Paiement à 30 jours fin de mois..."
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Coordonnées bancaires (IBAN / BIC)
-                  </label>
-                  <textarea
-                    name="bank_details"
-                    rows={2}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={formData.bank_details}
-                    onChange={handleChange}
-                    placeholder="IBAN : FR76 ...  BIC : ..."
-                  />
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                  Les coordonnées bancaires, le pied de page et les mentions légales proviennent des paramètres PDF.
+                  Laissez-les centralisés pour garder des factures cohérentes et rapides à produire.
                 </div>
               </CardContent>
             </Card>

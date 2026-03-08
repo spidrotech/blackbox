@@ -11,7 +11,7 @@ import base64
 from app.db.session import get_session
 from app.models import (
     Quote, QuoteCreate, QuoteUpdate,
-    LineItem, Customer, Project, Company, User
+    LineItem, Customer, Project, Company, User, PriceLibraryItem
 )
 from app.models.enums import QuoteStatus, LineItemType
 from app.core.security import get_current_user_required
@@ -25,6 +25,80 @@ from app.services.pdf_service import (
 )
 
 router = APIRouter()
+
+
+def _sync_quote_lines_to_price_library(
+    session: Session,
+    company_id: int,
+    line_items_data: List[dict],
+) -> None:
+    for item_data in line_items_data:
+        raw_type = (
+            item_data.get("item_type")
+            or item_data.get("itemType")
+            or "supply"
+        )
+        try:
+            resolved_type = LineItemType(raw_type)
+        except ValueError:
+            resolved_type = LineItemType.SUPPLY
+
+        if resolved_type in (LineItemType.SECTION, LineItemType.TEXT, LineItemType.PAGE_BREAK):
+            continue
+
+        designation = str(
+            item_data.get("designation")
+            or item_data.get("description")
+            or ""
+        ).strip()
+        if not designation:
+            continue
+
+        reference = item_data.get("reference")
+        unit = item_data.get("unit") or "u"
+        unit_price = Decimal(str(item_data.get("unit_price") or item_data.get("unitPrice") or 0))
+        tax_rate = Decimal(str(item_data.get("vat_rate") or item_data.get("taxRate") or 20))
+        long_description = item_data.get("long_description") or item_data.get("longDescription")
+        brand = item_data.get("brand")
+
+        statement = select(PriceLibraryItem).where(
+            PriceLibraryItem.company_id == company_id,
+            PriceLibraryItem.item_type == resolved_type,
+            PriceLibraryItem.name == designation,
+            PriceLibraryItem.unit == unit,
+        )
+        if reference:
+            statement = statement.where(PriceLibraryItem.reference == reference)
+
+        existing_item = session.exec(statement).first()
+
+        if existing_item:
+            existing_item.unit_price = unit_price
+            existing_item.tax_rate = tax_rate
+            existing_item.long_description = long_description or existing_item.long_description
+            existing_item.brand = brand or existing_item.brand
+            existing_item.reference = reference or existing_item.reference
+            existing_item.is_active = True
+            existing_item.usage_count = (existing_item.usage_count or 0) + 1
+            existing_item.updated_at = datetime.utcnow()
+            session.add(existing_item)
+            continue
+
+        new_item = PriceLibraryItem(
+            company_id=company_id,
+            name=designation,
+            description=designation,
+            long_description=long_description,
+            item_type=resolved_type,
+            unit=unit,
+            unit_price=unit_price,
+            tax_rate=tax_rate,
+            reference=reference,
+            brand=brand,
+            usage_count=1,
+            is_active=True,
+        )
+        session.add(new_item)
 
 
 def _default_bank_details(company: Optional[Company]) -> Optional[str]:
@@ -376,6 +450,12 @@ def create_quote(
                 display_order=i,
             )
             session.add(line_item)
+
+        _sync_quote_lines_to_price_library(
+            session=session,
+            company_id=current_user.company_id,
+            line_items_data=quote_data.line_items,
+        )
         session.commit()
     
     return {
@@ -689,6 +769,12 @@ def update_quote(
                 display_order=i,
             )
             session.add(line_item)
+
+        _sync_quote_lines_to_price_library(
+            session=session,
+            company_id=current_user.company_id,
+            line_items_data=line_items_data,
+        )
     
     session.commit()
     session.refresh(quote)

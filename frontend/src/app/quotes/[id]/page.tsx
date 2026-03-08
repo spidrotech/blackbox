@@ -418,18 +418,20 @@ export default function QuoteDetailPage() {
           </div>
 
           {/* Notes / Footer */}
-          {(q.footer_notes || q.conditions) && (
+          {(q.conditions || q.payment_terms) && (
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">
-              {q.footer_notes && (
-                <Section title="Notes de pied de page">
-                  <p className="text-sm text-gray-600 whitespace-pre-line">{q.footer_notes}</p>
-                </Section>
-              )}
+              
               {q.conditions && (
                 <Section title="Conditions générales">
                   <p className="text-sm text-gray-600 whitespace-pre-line">{q.conditions}</p>
                 </Section>
               )}
+              {q.payment_terms && (
+                <Section title="Conditions de paiement">
+                  <p className="text-sm text-gray-600 whitespace-pre-line">{q.payment_terms}</p>
+                </Section>
+              )}
+              
             </div>
           )}
         </div>
@@ -490,9 +492,7 @@ export default function QuoteDetailPage() {
           {/* Bank details */}
           {q.bank_details && (
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-              <Section title="Coordonnées bancaires">
-                <p className="text-sm text-gray-600 whitespace-pre-line">{q.bank_details}</p>
-              </Section>
+              
             </div>
           )}
 
@@ -501,7 +501,13 @@ export default function QuoteDetailPage() {
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="px-4 py-2.5 border-b border-gray-50 flex items-center justify-between">
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Aperçu PDF</span>
-                <button onClick={handleDownloadPdf} className="text-xs text-blue-600 hover:underline">Télécharger</button>
+                <div className="flex items-center gap-3">
+                    <button onClick={() => window.open('/settings?tab=documents&doc=entetes', '_blank')} className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1" title="Configurer l'en-tête et pied de page">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                      Paramètres PDF
+                    </button>
+                    <button onClick={handleDownloadPdf} className="text-xs text-blue-600 hover:underline">Télécharger</button>
+                  </div>
               </div>
               <iframe
                 src={pdfUrl}

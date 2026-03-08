@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
+import { PdfSettingsCard } from '@/components/documents/PdfSettingsCard';
 import { quoteService, customerService, projectService, settingsService } from '@/services/api';
 import { QuoteCreate, Customer, Project, LineItem, LineItemType } from '@/types';
 import { LineItemsEditor, LineItemData } from '@/components/quotes/LineItemsEditor';
@@ -72,6 +73,7 @@ export default function EditQuotePage() {
   const [saving, setSaving] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [companySettings, setCompanySettings] = useState<CompanySettingsData | null>(null);
   
   const DEFAULT_CGV = '';
 
@@ -83,6 +85,7 @@ export default function EditQuotePage() {
     notes: '',
     terms_and_conditions: DEFAULT_CGV,
     conditions: DEFAULT_CGV,
+    payment_terms: '',
     validity_days: 30,
     deposit_percent: 0,
     discount_percent: 0,
@@ -114,7 +117,10 @@ export default function EditQuotePage() {
 
       const defaults = settingsRes.success && settingsRes.data
         ? getDocumentDefaultsFromCompany(settingsRes.data as CompanySettingsData)
-        : { conditions: DEFAULT_CGV, paymentTerms: '', bankDetails: '', legalMentions: '' };
+        : { conditions: DEFAULT_CGV, paymentTerms: '', bankDetails: '', legalMentions: '', footerNotes: '' };
+      if (settingsRes.success && settingsRes.data) {
+        setCompanySettings(settingsRes.data as CompanySettingsData);
+      }
       
       const quoteData = (quoteRes as QuoteByIdResponseLike).quote ?? quoteRes.data;
       if (quoteRes.success && quoteData) {
@@ -153,7 +159,7 @@ export default function EditQuotePage() {
           mpr_premium: q.mpr_premium || q.mprPremium || 0,
           waste_management_fee: q.waste_management || q.waste_management_fee || 0,
           worksite_address: q.worksite_address || q.worksiteAddress || '',
-          footer_notes: q.footer_notes || q.footerNotes || '',
+          footer_notes: q.footer_notes || q.footerNotes || defaults.footerNotes,
           bank_details: q.bank_details || q.bankDetails || defaults.bankDetails,
           legal_mentions: q.legal_mentions || q.legalMentions || defaults.legalMentions,
           payment_terms: q.payment_terms || q.paymentTerms || defaults.paymentTerms,
@@ -254,6 +260,8 @@ export default function EditQuotePage() {
           <h1 className="text-2xl font-bold text-gray-900">Modifier le devis</h1>
           <p className="text-gray-500">Mettre à jour les informations du devis</p>
         </div>
+
+        <PdfSettingsCard company={companySettings} documentLabel="devis" />
 
         <form onSubmit={handleSubmit}>
           <Card>
@@ -403,11 +411,11 @@ export default function EditQuotePage() {
 
           <Card className="mt-6">
             <CardHeader>
-              <CardTitle>Notes et conditions</CardTitle>
+              <CardTitle>Contenu visible sur le PDF</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes internes</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes (visibles sur le devis)</label>
                 <textarea
                   name="notes"
                   rows={2}
@@ -427,26 +435,18 @@ export default function EditQuotePage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes de pied de page</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Conditions de paiement</label>
                 <textarea
-                  name="footer_notes"
+                  name="payment_terms"
                   rows={2}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={formData.footer_notes || ''}
+                  value={formData.payment_terms || ''}
                   onChange={handleChange}
-                  placeholder="Texte affiché en bas du devis PDF"
+                  placeholder="Ex : Chèque, espèces, virement bancaire"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Coordonnées bancaires</label>
-                <textarea
-                  name="bank_details"
-                  rows={2}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={formData.bank_details || ''}
-                  onChange={handleChange}
-                  placeholder="IBAN, BIC..."
-                />
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Le pied de page, les mentions légales et les coordonnées bancaires sont centralisés dans les paramètres PDF.
               </div>
             </CardContent>
           </Card>

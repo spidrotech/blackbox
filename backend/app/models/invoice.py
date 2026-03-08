@@ -2,6 +2,7 @@ from sqlmodel import SQLModel, Field, Relationship
 from typing import Optional, List, TYPE_CHECKING
 from datetime import date, datetime
 from decimal import Decimal
+from sqlalchemy import Column, Text
 
 from .enums import InvoiceStatus
 
@@ -41,14 +42,22 @@ class Invoice(SQLModel, table=True):
     amount_paid: Optional[Decimal] = Field(default=Decimal(0), max_digits=10, decimal_places=2)
     
     # Informations supplémentaires
-    notes: Optional[str] = Field(default=None)
-    payment_terms: Optional[str] = Field(default=None)
-    bank_details: Optional[str] = Field(default=None)
+    notes: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    payment_terms: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    bank_details: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     purchase_order: Optional[str] = Field(default=None, max_length=100)  # N° bon de commande client
-    conditions: Optional[str] = Field(default=None)  # CGV / conditions générales
+    conditions: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))  # CGV / conditions générales
     
     # Type de facture
     invoice_type: str = Field(default="invoice", max_length=50)  # invoice, credit_note, proforma
+    
+    # Lien avoir → facture originale
+    original_invoice_id: Optional[int] = Field(default=None, foreign_key="invoices.id")
+    
+    # Factur-X / e-invoicing (conformité loi française 2026)
+    facturx_status: Optional[str] = Field(default=None, max_length=30)  # pending, generated, sent
+    facturx_xml: Optional[str] = Field(default=None)  # XML Factur-X embarqué
+    siren_buyer: Optional[str] = Field(default=None, max_length=20)  # SIREN acheteur
     
     created_by_id: Optional[int] = Field(default=None, foreign_key="users.id")
     

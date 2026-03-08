@@ -158,6 +158,8 @@ export default function InvoiceDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
+  const [creatingCreditNote, setCreatingCreditNote] = useState(false);
 
   const loadInvoice = useCallback(async () => {
     try {
@@ -202,6 +204,52 @@ export default function InvoiceDetailPage() {
       if (res.success) router.push('/invoices');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleDuplicate = async () => {
+    if (!confirm('Dupliquer cette facture ?')) return;
+    setDuplicating(true);
+    try {
+      const res = await invoiceService.duplicate(invoiceId);
+      if (res.success && res.data) {
+        router.push(buildDetailPath('invoices', res.data.id));
+      }
+    } catch {
+      alert('Erreur lors de la duplication');
+    } finally {
+      setDuplicating(false);
+    }
+  };
+
+  const handleCreditNote = async () => {
+    if (!confirm('Créer un avoir (note de crédit) pour cette facture ?')) return;
+    setCreatingCreditNote(true);
+    try {
+      const res = await invoiceService.createCreditNote(invoiceId);
+      if (res.success && res.data) {
+        router.push(buildDetailPath('invoices', res.data.id));
+      }
+    } catch {
+      alert('Erreur lors de la création de l\'avoir');
+    } finally {
+      setCreatingCreditNote(false);
+    }
+  };
+
+  const handleDownloadFacturX = async () => {
+    try {
+      await invoiceService.downloadFacturxPdf(invoiceId, invoice?.reference ?? `FAC-${invoiceId}`);
+    } catch {
+      alert('Erreur lors du téléchargement Factur-X');
+    }
+  };
+
+  const handleDownloadFacturXml = async () => {
+    try {
+      await invoiceService.downloadFacturxXml(invoiceId, invoice?.reference ?? `FAC-${invoiceId}`);
+    } catch {
+      alert('Erreur lors du téléchargement XML');
     }
   };
 
@@ -304,6 +352,22 @@ export default function InvoiceDetailPage() {
             >
               📄 PDF
             </Button>
+            {/* Factur-X e-invoicing */}
+            <Button onClick={handleDownloadFacturX} variant="outline">
+              🇫🇷 Factur-X PDF
+            </Button>
+            <Button onClick={handleDownloadFacturXml} variant="outline">
+              📋 XML CII
+            </Button>
+            {/* Duplicate & Credit Note */}
+            <Button onClick={handleDuplicate} loading={duplicating} variant="outline">
+              📑 Dupliquer
+            </Button>
+            {(status === 'paid' || status === 'sent' || status === 'partial') && (
+              <Button onClick={handleCreditNote} loading={creatingCreditNote} variant="outline">
+                ↩️ Avoir
+              </Button>
+            )}
             <Button variant="outline" onClick={() => router.push(buildEditPath('invoices', invoiceId))}>
               Modifier
             </Button>
@@ -498,7 +562,7 @@ export default function InvoiceDetailPage() {
         </Card>
 
         {/* ── Notes & Conditions ───────────────────────── */}
-        {(invoice.notes || invoice.paymentTerms || invoice.payment_terms || invoice.bankDetails || invoice.bank_details) && (
+        {(invoice.notes || invoice.paymentTerms || invoice.payment_terms || invoice.bankDetails || invoice.bank_details || invoice.conditions || invoice.terms_and_conditions) && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {invoice.notes && (
               <Card>
@@ -524,6 +588,16 @@ export default function InvoiceDetailPage() {
                 <CardContent>
                   <p className="text-sm text-gray-700 whitespace-pre-wrap">
                     {invoice.bankDetails ?? invoice.bank_details}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+            {(invoice.conditions || invoice.terms_and_conditions) && (
+              <Card className="sm:col-span-2">
+                <CardHeader><CardTitle className="text-sm">Conditions & mentions légales</CardTitle></CardHeader>
+                <CardContent>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {invoice.conditions ?? invoice.terms_and_conditions}
                   </p>
                 </CardContent>
               </Card>

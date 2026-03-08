@@ -103,3 +103,24 @@ class PriceLibraryItemUpdate(SQLModel):
     cost_price: Optional[Decimal] = None
     is_active: Optional[bool] = None
     is_favorite: Optional[bool] = None
+
+
+class PriceLibraryImportItem(SQLModel):
+    name: str
+    description: Optional[str] = None
+    long_description: Optional[str] = None
+    item_type: Optional[LineItemType] = LineItemType.SUPPLY
+    category: Optional[str] = None
+    subcategory: Optional[str] = None
+    trade: Optional[str] = None
+    unit: Optional[str] = "u"
+    unit_price: Decimal
+    tax_rate: Optional[Decimal] = Decimal("20.00")
+    reference: Optional[str] = None
+    brand: Optional[str] = None
+    cost_price: Optional[Decimal] = None
+
+
+class PriceLibraryImportRequest(SQLModel):
+    items: List[PriceLibraryImportItem]
+    upsert: bool = True

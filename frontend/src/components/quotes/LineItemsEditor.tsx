@@ -1,6 +1,6 @@
-'use client';
+﻿'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 export type ItemType =
   | 'supply' | 'labor' | 'work' | 'subcontracting' | 'equipment' | 'misc' | 'other'
@@ -39,42 +39,44 @@ const STRUCT_TYPES = ITEM_TYPES.filter(t => t.group);
 const UNIT_OPTIONS = ['u', 'h', 'jour', 'm', 'm\u00b2', 'm\u00b3', 'kg', 'forfait', 'ml'];
 const VAT_OPTIONS = [20, 10, 5.5, 2.1, 0];
 
-const TYPE_BADGE: Record<ItemType, string> = {
-  supply:         'bg-blue-50 text-blue-700 border-blue-200',
-  labor:          'bg-orange-50 text-orange-700 border-orange-200',
-  work:           'bg-purple-50 text-purple-700 border-purple-200',
-  subcontracting: 'bg-pink-50 text-pink-700 border-pink-200',
-  equipment:      'bg-cyan-50 text-cyan-700 border-cyan-200',
-  misc:           'bg-gray-50 text-gray-600 border-gray-200',
-  other:          'bg-gray-50 text-gray-500 border-gray-200',
-  section:        'bg-slate-100 text-slate-600 border-slate-200',
-  text:           'bg-yellow-50 text-yellow-700 border-yellow-200',
-  page_break:     'bg-gray-100 text-gray-400 border-gray-200',
+const TYPE_STYLE: Record<ItemType, { bg: string; text: string; ring: string; dot: string }> = {
+  supply:         { bg: 'bg-blue-50',    text: 'text-blue-700',    ring: 'ring-blue-200',    dot: 'bg-blue-500' },
+  labor:          { bg: 'bg-orange-50',  text: 'text-orange-700',  ring: 'ring-orange-200',  dot: 'bg-orange-500' },
+  work:           { bg: 'bg-violet-50',  text: 'text-violet-700',  ring: 'ring-violet-200',  dot: 'bg-violet-500' },
+  subcontracting: { bg: 'bg-pink-50',   text: 'text-pink-700',    ring: 'ring-pink-200',    dot: 'bg-pink-500' },
+  equipment:      { bg: 'bg-cyan-50',   text: 'text-cyan-700',    ring: 'ring-cyan-200',    dot: 'bg-cyan-500' },
+  misc:           { bg: 'bg-gray-50',   text: 'text-gray-600',    ring: 'ring-gray-200',    dot: 'bg-gray-400' },
+  other:          { bg: 'bg-gray-50',   text: 'text-gray-500',    ring: 'ring-gray-200',    dot: 'bg-gray-400' },
+  section:        { bg: 'bg-slate-50',  text: 'text-slate-700',   ring: 'ring-slate-200',   dot: 'bg-slate-500' },
+  text:           { bg: 'bg-amber-50',  text: 'text-amber-700',   ring: 'ring-amber-200',   dot: 'bg-amber-500' },
+  page_break:     { bg: 'bg-gray-50',   text: 'text-gray-400',    ring: 'ring-gray-200',    dot: 'bg-gray-300' },
 };
 
 function TypeBadge({ type }: { type: ItemType }) {
   const t = ITEM_TYPES.find(x => x.value === type);
+  const s = TYPE_STYLE[type] || TYPE_STYLE.other;
   return (
-    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${TYPE_BADGE[type] || 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ring-1 ${s.bg} ${s.text} ${s.ring}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
       {t?.label || type}
     </span>
   );
 }
 
-/* ─── Rich Text Toolbar ─────────────────────────────────────────────────── */
+/* Rich Text Editor */
 function RichTextArea({
-  value, onChange, placeholder, rows = 2, className = '',
+  value, onChange, placeholder, rows = 2, className = '', premium = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   rows?: number;
   className?: string;
+  premium?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [focused, setFocused] = useState(false);
 
-  // Sync external value changes (only when not focused)
   useEffect(() => {
     if (ref.current && !focused) {
       if (ref.current.innerHTML !== value) {
@@ -92,35 +94,60 @@ function RichTextArea({
     onChange(ref.current?.innerHTML || '');
   };
 
-  const toolbarBtn = (label: string, cmd: string, arg?: string, title?: string) => (
+  const ToolBtn = ({ children, cmd, arg, title }: {
+    children: React.ReactNode; cmd: string; arg?: string; title: string;
+  }) => (
     <button
       type="button"
-      title={title || cmd}
+      title={title}
       onMouseDown={e => { e.preventDefault(); exec(cmd, arg); }}
-      className="px-1.5 py-0.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded transition-colors"
+      className="w-7 h-7 flex items-center justify-center rounded-md text-xs font-semibold transition-all text-gray-500 hover:bg-gray-100 hover:text-gray-700"
     >
-      {label}
+      {children}
     </button>
   );
 
+  const borderClass = premium
+    ? focused ? 'ring-2 ring-violet-300 border-violet-300 shadow-sm' : 'border-gray-200 hover:border-gray-300'
+    : focused ? 'ring-2 ring-blue-300 border-blue-300' : 'border-gray-200';
+
   return (
-    <div className={`border rounded-lg overflow-hidden ${focused ? 'ring-2 ring-blue-500 border-blue-400' : 'border-gray-200'} ${className}`}>
-      {/* Toolbar */}
-      <div className="flex items-center gap-0.5 px-2 py-1 border-b border-gray-100 bg-gray-50/80">
-        {toolbarBtn('B', 'bold', undefined, 'Gras')}
-        {toolbarBtn('I', 'italic', undefined, 'Italique')}
-        {toolbarBtn('U', 'underline', undefined, 'Soulign\u00e9')}
-        <div className="w-px h-3 bg-gray-200 mx-0.5" />
-        {toolbarBtn('\u2022\u2022', 'insertUnorderedList', undefined, 'Liste \u00e0 puces')}
-        {toolbarBtn('1.', 'insertOrderedList', undefined, 'Liste num\u00e9rot\u00e9e')}
-        <div className="w-px h-3 bg-gray-200 mx-0.5" />
+    <div className={`rounded-xl border transition-all duration-200 ${borderClass} ${className}`}>
+      <div className={`flex items-center gap-0.5 px-2 py-1.5 border-b ${focused ? 'border-violet-100 bg-violet-50/30' : 'border-gray-100 bg-gray-50/50'} rounded-t-xl transition-colors`}>
+        <ToolBtn cmd="bold" title="Gras (Ctrl+B)">
+          <span className="font-black text-[11px]">B</span>
+        </ToolBtn>
+        <ToolBtn cmd="italic" title="Italique (Ctrl+I)">
+          <span className="italic font-semibold text-[11px]">I</span>
+        </ToolBtn>
+        <ToolBtn cmd="underline" title="Soulign\u00e9 (Ctrl+U)">
+          <span className="underline font-semibold text-[11px]">U</span>
+        </ToolBtn>
+        <div className="w-px h-4 bg-gray-200 mx-1" />
+        <ToolBtn cmd="insertUnorderedList" title="Liste \u00e0 puces">
+          <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+            <circle cx="2" cy="4" r="1.5" /><rect x="5" y="3" width="10" height="2" rx="0.5" />
+            <circle cx="2" cy="8" r="1.5" /><rect x="5" y="7" width="10" height="2" rx="0.5" />
+            <circle cx="2" cy="12" r="1.5" /><rect x="5" y="11" width="10" height="2" rx="0.5" />
+          </svg>
+        </ToolBtn>
+        <ToolBtn cmd="insertOrderedList" title="Liste num\u00e9rot\u00e9e">
+          <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+            <text x="0" y="5.5" fontSize="5" fontWeight="bold">1.</text><rect x="5" y="3" width="10" height="2" rx="0.5" />
+            <text x="0" y="9.5" fontSize="5" fontWeight="bold">2.</text><rect x="5" y="7" width="10" height="2" rx="0.5" />
+            <text x="0" y="13.5" fontSize="5" fontWeight="bold">3.</text><rect x="5" y="11" width="10" height="2" rx="0.5" />
+          </svg>
+        </ToolBtn>
+        <div className="flex-1" />
         <button
           type="button"
-          title="Effacer mise en forme"
+          title="Effacer la mise en forme"
           onMouseDown={e => { e.preventDefault(); exec('removeFormat'); }}
-          className="px-1.5 py-0.5 text-xs text-gray-400 hover:bg-gray-100 rounded"
+          className="w-7 h-7 flex items-center justify-center rounded-md text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
         >
-          ✕
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
         </button>
       </div>
       <div
@@ -131,17 +158,16 @@ function RichTextArea({
         onBlur={() => setFocused(false)}
         onInput={handleInput}
         data-placeholder={placeholder}
-        style={{ minHeight: `${rows * 1.5}rem` }}
-        className={`px-3 py-2 text-sm outline-none leading-relaxed [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5 empty:before:content-[attr(data-placeholder)] empty:before:text-gray-300`}
+        style={{ minHeight: `${rows * 1.6}rem` }}
+        className="px-3 py-2.5 text-sm leading-relaxed outline-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_b]:font-bold [&_i]:italic empty:before:content-[attr(data-placeholder)] empty:before:text-gray-300 empty:before:pointer-events-none selection:bg-violet-100"
       />
     </div>
   );
 }
 
-/* ─── Insert Submenu ─────────────────────────────────────────────────────── */
+/* Insert Submenu */
 function InsertSubmenu({
-  position,
-  onInsert,
+  position, onInsert,
 }: {
   position: 'before' | 'after';
   onInsert: (position: 'before' | 'after', type: ItemType) => void;
@@ -153,36 +179,32 @@ function InsertSubmenu({
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
-      <button
-        type="button"
-        className="w-full text-left px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between"
-      >
+      <button type="button"
+        className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-violet-50 hover:text-violet-700 flex items-center justify-between rounded-md transition-colors">
         <span>Ins\u00e9rer {position === 'before' ? 'au dessus' : 'en dessous'}</span>
         <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       </button>
       {open && (
-        <ul className="absolute left-full top-0 w-40 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-50">
-          {PRICE_TYPES.map(t => (
-            <li key={t.value}>
-              <button
-                type="button"
-                onClick={() => onInsert(position, t.value as ItemType)}
-                className="w-full text-left px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-              >
-                {t.label}
-              </button>
-            </li>
-          ))}
-          <li className="border-t border-gray-50 my-1" />
+        <ul className="absolute left-full top-0 w-44 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-50">
+          {PRICE_TYPES.map(t => {
+            const s = TYPE_STYLE[t.value];
+            return (
+              <li key={t.value}>
+                <button type="button" onClick={() => onInsert(position, t.value as ItemType)}
+                  className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors">
+                  <span className={`w-2 h-2 rounded-full ${s?.dot || 'bg-gray-300'}`} />
+                  {t.label}
+                </button>
+              </li>
+            );
+          })}
+          <li className="border-t border-gray-100 my-1" />
           {STRUCT_TYPES.map(t => (
             <li key={t.value}>
-              <button
-                type="button"
-                onClick={() => onInsert(position, t.value as ItemType)}
-                className="w-full text-left px-4 py-1.5 text-sm text-gray-500 hover:bg-gray-50"
-              >
+              <button type="button" onClick={() => onInsert(position, t.value as ItemType)}
+                className="w-full text-left px-3 py-1.5 text-sm text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors">
                 {t.label}
               </button>
             </li>
@@ -193,11 +215,67 @@ function InsertSubmenu({
   );
 }
 
-/* ─── Line Item Row ──────────────────────────────────────────────────────── */
+/* Action Menu */
+function ActionMenu({
+  index, total, menuOpen, setMenuOpen, menuRef,
+  onMoveUp, onMoveDown, onInsert, onDuplicate, onRemove,
+}: {
+  index: number; total: number; menuOpen: boolean;
+  setMenuOpen: (v: boolean) => void;
+  menuRef: React.RefObject<HTMLDivElement | null>;
+  onMoveUp: (i: number) => void; onMoveDown: (i: number) => void;
+  onInsert: (i: number, pos: 'before' | 'after', type: ItemType) => void;
+  onDuplicate: (i: number) => void; onRemove: (i: number) => void;
+}) {
+  return (
+    <div ref={menuRef} className="relative flex-shrink-0">
+      <button type="button" onClick={() => setMenuOpen(!menuOpen)}
+        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+        title="Actions">
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+          <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+        </svg>
+      </button>
+      {menuOpen && (
+        <ul className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-40 text-sm">
+          {index > 0 && (
+            <li><button type="button" onClick={() => { onMoveUp(index); setMenuOpen(false); }}
+              className="w-full text-left px-3 py-1.5 text-gray-700 hover:bg-gray-50 flex items-center gap-2 rounded-md transition-colors">
+              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+              D\u00e9placer vers le haut
+            </button></li>
+          )}
+          {index < total - 1 && (
+            <li><button type="button" onClick={() => { onMoveDown(index); setMenuOpen(false); }}
+              className="w-full text-left px-3 py-1.5 text-gray-700 hover:bg-gray-50 flex items-center gap-2 rounded-md transition-colors">
+              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              D\u00e9placer vers le bas
+            </button></li>
+          )}
+          {(index > 0 || index < total - 1) && <li className="border-t border-gray-50 my-1" />}
+          <InsertSubmenu position="before" onInsert={(pos, type) => { onInsert(index, pos, type); setMenuOpen(false); }} />
+          <InsertSubmenu position="after" onInsert={(pos, type) => { onInsert(index, pos, type); setMenuOpen(false); }} />
+          <li className="border-t border-gray-50 my-1" />
+          <li><button type="button" onClick={() => { onDuplicate(index); setMenuOpen(false); }}
+            className="w-full text-left px-3 py-1.5 text-gray-700 hover:bg-gray-50 flex items-center gap-2 rounded-md transition-colors">
+            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+            Dupliquer
+          </button></li>
+          <li className="border-t border-gray-50 my-1" />
+          <li><button type="button" onClick={() => { onRemove(index); setMenuOpen(false); }}
+            className="w-full text-left px-3 py-1.5 text-red-600 hover:bg-red-50 flex items-center gap-2 rounded-md transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            Supprimer
+          </button></li>
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/* Line Item Row */
 interface LineItemRowProps {
-  item: LineItemData;
-  index: number;
-  total: number;
+  item: LineItemData; index: number; total: number;
   onUpdate: (index: number, updates: Partial<LineItemData>) => void;
   onRemove: (index: number) => void;
   onMoveUp: (index: number) => void;
@@ -211,13 +289,11 @@ export function LineItemRow({
 }: LineItemRowProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
   const qty = item.quantity ?? 1;
   const pu = item.unit_price ?? 0;
   const disc = item.discount_percent ?? 0;
   const lineTotal = qty * pu * (1 - disc / 100);
 
-  // Close menu when clicking outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
@@ -226,58 +302,28 @@ export function LineItemRow({
     return () => document.removeEventListener('mousedown', handler);
   }, [menuOpen]);
 
-  /* ── Section row ── */
+  const s = TYPE_STYLE[item.item_type] || TYPE_STYLE.other;
+
+  /* Section row */
   if (item.item_type === 'section') {
     return (
-      <div className="flex items-center gap-2 py-1.5 px-3 bg-slate-50 border border-slate-200 rounded-lg group">
-        <svg className="w-4 h-4 text-slate-400 cursor-grab flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-        <span className="text-xs font-bold text-slate-500 uppercase tracking-wide flex-shrink-0">Section</span>
-        <input
-          type="text"
-          value={item.description}
-          onChange={e => onUpdate(index, { description: e.target.value })}
-          placeholder="Nom de la section..."
-          className="flex-1 text-sm font-semibold text-slate-700 bg-transparent border-none outline-none placeholder:text-slate-300"
-        />
-        <ActionMenu index={index} total={total} menuOpen={menuOpen} setMenuOpen={setMenuOpen} menuRef={menuRef}
-          onMoveUp={onMoveUp} onMoveDown={onMoveDown} onInsert={onInsert} onDuplicate={onDuplicate} onRemove={onRemove} />
-      </div>
-    );
-  }
-
-  /* ── Page break row ── */
-  if (item.item_type === 'page_break') {
-    return (
-      <div className="flex items-center gap-2 py-1.5 px-3 bg-gray-50 border border-dashed border-gray-200 rounded-lg group">
-        <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-        <div className="flex-1 border-t-2 border-dashed border-gray-200" />
-        <span className="text-xs text-gray-400 font-medium px-2">Saut de page</span>
-        <div className="flex-1 border-t-2 border-dashed border-gray-200" />
-        <ActionMenu index={index} total={total} menuOpen={menuOpen} setMenuOpen={setMenuOpen} menuRef={menuRef}
-          onMoveUp={onMoveUp} onMoveDown={onMoveDown} onInsert={onInsert} onDuplicate={onDuplicate} onRemove={onRemove} />
-      </div>
-    );
-  }
-
-  /* ── Text row ── */
-  if (item.item_type === 'text') {
-    return (
-      <div className="p-3 bg-yellow-50/60 border border-yellow-100 rounded-lg group">
-        <div className="flex items-start gap-2">
-          <svg className="w-4 h-4 text-yellow-400 mt-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-          <RichTextArea
-            value={item.description}
-            onChange={v => onUpdate(index, { description: v })}
-            placeholder="Texte libre..."
-            rows={2}
-            className="flex-1"
-          />
+      <div className="group relative">
+        <div className={`flex items-center gap-3 py-2.5 px-4 ${s.bg} border border-slate-200 rounded-xl shadow-sm`}>
+          <div className="flex flex-col gap-0.5 cursor-grab opacity-30 group-hover:opacity-70 transition-opacity">
+            <div className="flex gap-0.5"><div className="w-1 h-1 bg-slate-400 rounded-full" /><div className="w-1 h-1 bg-slate-400 rounded-full" /></div>
+            <div className="flex gap-0.5"><div className="w-1 h-1 bg-slate-400 rounded-full" /><div className="w-1 h-1 bg-slate-400 rounded-full" /></div>
+            <div className="flex gap-0.5"><div className="w-1 h-1 bg-slate-400 rounded-full" /><div className="w-1 h-1 bg-slate-400 rounded-full" /></div>
+          </div>
+          <div className="w-8 h-8 rounded-lg bg-slate-200/60 flex items-center justify-center">
+            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+            </svg>
+          </div>
+          <input type="text" value={item.description}
+            onChange={e => onUpdate(index, { description: e.target.value })}
+            placeholder="Titre de la section..."
+            className="flex-1 text-base font-bold text-slate-800 bg-transparent border-none outline-none placeholder:text-slate-300 placeholder:font-normal" />
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-2">Section</span>
           <ActionMenu index={index} total={total} menuOpen={menuOpen} setMenuOpen={setMenuOpen} menuRef={menuRef}
             onMoveUp={onMoveUp} onMoveDown={onMoveDown} onInsert={onInsert} onDuplicate={onDuplicate} onRemove={onRemove} />
         </div>
@@ -285,201 +331,151 @@ export function LineItemRow({
     );
   }
 
-  /* ── Standard line item row ── */
-  return (
-    <div className="p-3 bg-white border border-gray-200 rounded-lg group hover:border-gray-300 transition-colors">
-      {/* Row 1: designation + type + qty + unit + pu + disc + tva + total + menu */}
-      <div className="flex items-start gap-2">
-        {/* Drag handle */}
-        <svg className="w-4 h-4 text-gray-300 mt-2.5 flex-shrink-0 cursor-grab" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <circle cx="9" cy="6" r="1" fill="currentColor" />
-          <circle cx="9" cy="12" r="1" fill="currentColor" />
-          <circle cx="9" cy="18" r="1" fill="currentColor" />
-          <circle cx="15" cy="6" r="1" fill="currentColor" />
-          <circle cx="15" cy="12" r="1" fill="currentColor" />
-          <circle cx="15" cy="18" r="1" fill="currentColor" />
-        </svg>
-
-        {/* Designation (rich text) + type badge */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <TypeBadge type={item.item_type} />
-            <select
-              value={item.item_type}
-              onChange={e => onUpdate(index, { item_type: e.target.value as ItemType })}
-              className="text-[10px] border-0 bg-transparent text-gray-400 outline-none cursor-pointer hover:text-gray-600 p-0"
-            >
-              {ITEM_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-          </div>
-          <RichTextArea
-            value={item.description}
-            onChange={v => onUpdate(index, { description: v })}
-            placeholder="D\u00e9signation..."
-            rows={2}
-          />
-        </div>
-
-        {/* Numeric fields */}
-        <div className="flex items-end gap-1.5 flex-shrink-0 mt-6">
-          {/* Qty */}
-          <div className="text-center">
-            <label className="block text-[10px] text-gray-400 mb-0.5">Qt\u00e9</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={qty}
-              onChange={e => onUpdate(index, { quantity: parseFloat(e.target.value) || 0 })}
-              className="w-14 text-sm text-center border border-gray-200 rounded-md px-1.5 py-1 outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-400"
-            />
-          </div>
-          {/* Unit */}
-          <div className="text-center">
-            <label className="block text-[10px] text-gray-400 mb-0.5">Unit\u00e9</label>
-            <select
-              value={item.unit || 'u'}
-              onChange={e => onUpdate(index, { unit: e.target.value })}
-              className="w-16 text-sm border border-gray-200 rounded-md px-1 py-1 outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-400 bg-white"
-            >
-              {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-            </select>
-          </div>
-          {/* PU HT */}
-          <div className="text-center">
-            <label className="block text-[10px] text-gray-400 mb-0.5">P.U. HT</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={pu}
-              onChange={e => onUpdate(index, { unit_price: parseFloat(e.target.value) || 0 })}
-              className="w-24 text-sm text-right border border-gray-200 rounded-md px-1.5 py-1 outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-400"
-            />
-          </div>
-          {/* TVA */}
-          <div className="text-center">
-            <label className="block text-[10px] text-gray-400 mb-0.5">TVA</label>
-            <select
-              value={item.vat_rate ?? 20}
-              onChange={e => onUpdate(index, { vat_rate: parseFloat(e.target.value) })}
-              className="w-16 text-sm border border-gray-200 rounded-md px-1 py-1 outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-400 bg-white"
-            >
-              {VAT_OPTIONS.map(v => <option key={v} value={v}>{v}%</option>)}
-            </select>
-          </div>
-          {/* Total HT */}
-          <div className="text-right">
-            <label className="block text-[10px] text-gray-400 mb-0.5">Total HT</label>
-            <div className="w-24 text-sm font-semibold text-gray-800 py-1 px-1.5 text-right">
-              {lineTotal.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
-            </div>
-          </div>
-        </div>
-
-        {/* Action menu */}
+  /* Page break row */
+  if (item.item_type === 'page_break') {
+    return (
+      <div className="group flex items-center gap-3 py-2 px-4">
+        <div className="flex-1 border-t-2 border-dashed border-gray-200" />
+        <span className="flex items-center gap-1.5 text-xs text-gray-400 font-medium bg-white px-3 py-1 rounded-full border border-gray-100 shadow-sm">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Saut de page
+        </span>
+        <div className="flex-1 border-t-2 border-dashed border-gray-200" />
         <ActionMenu index={index} total={total} menuOpen={menuOpen} setMenuOpen={setMenuOpen} menuRef={menuRef}
           onMoveUp={onMoveUp} onMoveDown={onMoveDown} onInsert={onInsert} onDuplicate={onDuplicate} onRemove={onRemove} />
       </div>
+    );
+  }
 
-      {/* Row 2: optional long description */}
-      {item.long_description !== undefined && (
-        <div className="mt-2 ml-6">
-          <textarea
-            rows={2}
-            value={item.long_description || ''}
-            onChange={e => onUpdate(index, { long_description: e.target.value })}
-            placeholder="Description longue (optionnel)..."
-            className="w-full text-xs text-gray-500 border border-gray-100 rounded-md px-2 py-1.5 outline-none focus:ring-1 focus:ring-blue-500 resize-none"
-          />
+  /* Text row */
+  if (item.item_type === 'text') {
+    return (
+      <div className="group relative">
+        <div className="p-4 bg-amber-50/40 border border-amber-100 rounded-xl shadow-sm hover:shadow transition-shadow">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-100/60 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-1.5">Texte libre</p>
+              <RichTextArea value={item.description} onChange={v => onUpdate(index, { description: v })}
+                placeholder="Saisissez votre texte ici..." rows={2} premium />
+            </div>
+            <ActionMenu index={index} total={total} menuOpen={menuOpen} setMenuOpen={setMenuOpen} menuRef={menuRef}
+              onMoveUp={onMoveUp} onMoveDown={onMoveDown} onInsert={onInsert} onDuplicate={onDuplicate} onRemove={onRemove} />
+          </div>
         </div>
-      )}
-      {/* Toggle long_description */}
-      {item.long_description === undefined && (
-        <button
-          type="button"
-          onClick={() => onUpdate(index, { long_description: '' })}
-          className="mt-1.5 ml-6 text-[11px] text-gray-400 hover:text-blue-600 transition-colors"
-        >
-          + Description longue
-        </button>
-      )}
-    </div>
-  );
-}
+      </div>
+    );
+  }
 
-/* ─── Action Menu ────────────────────────────────────────────────────────── */
-function ActionMenu({
-  index, total, menuOpen, setMenuOpen, menuRef,
-  onMoveUp, onMoveDown, onInsert, onDuplicate, onRemove,
-}: {
-  index: number;
-  total: number;
-  menuOpen: boolean;
-  setMenuOpen: (v: boolean) => void;
-  menuRef: React.RefObject<HTMLDivElement | null>;
-  onMoveUp: (i: number) => void;
-  onMoveDown: (i: number) => void;
-  onInsert: (i: number, pos: 'before' | 'after', type: ItemType) => void;
-  onDuplicate: (i: number) => void;
-  onRemove: (i: number) => void;
-}) {
+  /* Standard line item row */
   return (
-    <div ref={menuRef} className="relative flex-shrink-0 mt-1.5">
-      <button
-        type="button"
-        onClick={() => setMenuOpen(!menuOpen)}
-        className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-        title="Actions"
-      >
-        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-          <circle cx="12" cy="5" r="1.5" />
-          <circle cx="12" cy="12" r="1.5" />
-          <circle cx="12" cy="19" r="1.5" />
-        </svg>
-      </button>
-      {menuOpen && (
-        <ul className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-40 text-sm">
-          {index > 0 && (
-            <li>
-              <button type="button" onClick={() => { onMoveUp(index); setMenuOpen(false); }}
-                className="w-full text-left px-4 py-1.5 text-gray-700 hover:bg-gray-50">
-                ↑ D\u00e9placer vers le haut
-              </button>
-            </li>
+    <div className="group relative">
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:border-gray-300 transition-all duration-200">
+        <div className={`h-1 ${s.dot} rounded-t-xl opacity-40`} />
+        <div className="p-4">
+          {/* Top: Type + Line total + Action */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-0.5 cursor-grab opacity-0 group-hover:opacity-50 transition-opacity mr-1">
+                <div className="flex gap-0.5"><div className="w-1 h-1 bg-gray-400 rounded-full" /><div className="w-1 h-1 bg-gray-400 rounded-full" /></div>
+                <div className="flex gap-0.5"><div className="w-1 h-1 bg-gray-400 rounded-full" /><div className="w-1 h-1 bg-gray-400 rounded-full" /></div>
+                <div className="flex gap-0.5"><div className="w-1 h-1 bg-gray-400 rounded-full" /><div className="w-1 h-1 bg-gray-400 rounded-full" /></div>
+              </div>
+              <TypeBadge type={item.item_type} />
+              <select value={item.item_type} onChange={e => onUpdate(index, { item_type: e.target.value as ItemType })}
+                className="text-[11px] border-0 bg-transparent text-gray-400 outline-none cursor-pointer hover:text-violet-600 p-0 transition-colors">
+                {ITEM_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              {item.reference && (
+                <span className="text-[10px] text-gray-400 bg-gray-50 px-2 py-0.5 rounded-md">R\u00e9f: {item.reference}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="text-right">
+                <span className="text-sm font-bold text-gray-900">
+                  {lineTotal.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+                </span>
+                <span className="text-[10px] text-gray-400 ml-1">HT</span>
+              </div>
+              <ActionMenu index={index} total={total} menuOpen={menuOpen} setMenuOpen={setMenuOpen} menuRef={menuRef}
+                onMoveUp={onMoveUp} onMoveDown={onMoveDown} onInsert={onInsert} onDuplicate={onDuplicate} onRemove={onRemove} />
+            </div>
+          </div>
+
+          {/* Middle: Rich text description */}
+          <div className="mb-3">
+            <RichTextArea value={item.description} onChange={v => onUpdate(index, { description: v })}
+              placeholder="D\u00e9signation de la prestation..." rows={2} premium />
+          </div>
+
+          {/* Bottom: Numeric fields */}
+          <div className="flex items-end gap-3 flex-wrap">
+            <div className="flex flex-col items-center gap-0.5">
+              <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Qt\u00e9</label>
+              <input type="number" step="0.01" min="0" value={qty}
+                onChange={e => onUpdate(index, { quantity: parseFloat(e.target.value) || 0 })}
+                className="w-20 text-sm text-right bg-gray-50/80 border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white transition-all hover:border-gray-300" />
+            </div>
+            <div className="flex flex-col items-center gap-0.5">
+              <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Unit\u00e9</label>
+              <select value={item.unit || 'u'} onChange={e => onUpdate(index, { unit: e.target.value })}
+                className="w-20 text-sm bg-gray-50/80 border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white transition-all hover:border-gray-300">
+                {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col items-center gap-0.5">
+              <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">P.U. HT</label>
+              <input type="number" step="0.01" min="0" value={pu}
+                onChange={e => onUpdate(index, { unit_price: parseFloat(e.target.value) || 0 })}
+                className="w-24 text-sm text-right bg-gray-50/80 border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white transition-all hover:border-gray-300" />
+            </div>
+            <div className="flex flex-col items-center gap-0.5">
+              <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">TVA</label>
+              <select value={item.vat_rate ?? 20} onChange={e => onUpdate(index, { vat_rate: parseFloat(e.target.value) })}
+                className="w-20 text-sm bg-gray-50/80 border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white transition-all hover:border-gray-300">
+                {VAT_OPTIONS.map(v => <option key={v} value={v}>{v}%</option>)}
+              </select>
+            </div>
+            <div className="ml-auto flex flex-col items-end gap-0.5">
+              <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Total HT</label>
+              <div className="w-28 text-sm font-bold text-gray-800 py-1.5 px-2 text-right bg-violet-50/50 rounded-lg border border-violet-100">
+                {lineTotal.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+              </div>
+            </div>
+          </div>
+
+          {/* Optional: long description */}
+          {item.long_description !== undefined && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5 block">Description d\u00e9taill\u00e9e</label>
+              <textarea rows={2} value={item.long_description || ''}
+                onChange={e => onUpdate(index, { long_description: e.target.value })}
+                placeholder="D\u00e9tails suppl\u00e9mentaires, sp\u00e9cifications techniques, etc."
+                className="w-full text-sm text-gray-600 bg-gray-50/50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white resize-none transition-all placeholder:text-gray-300 leading-relaxed" />
+            </div>
           )}
-          {index < total - 1 && (
-            <li>
-              <button type="button" onClick={() => { onMoveDown(index); setMenuOpen(false); }}
-                className="w-full text-left px-4 py-1.5 text-gray-700 hover:bg-gray-50">
-                ↓ D\u00e9placer vers le bas
-              </button>
-            </li>
+          {item.long_description === undefined && (
+            <button type="button" onClick={() => onUpdate(index, { long_description: '' })}
+              className="mt-2 text-[11px] text-gray-400 hover:text-violet-600 transition-colors flex items-center gap-1">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Ajouter une description d\u00e9taill\u00e9e
+            </button>
           )}
-          {(index > 0 || index < total - 1) && <li className="border-t border-gray-50 my-1" />}
-          <InsertSubmenu position="before" onInsert={(pos, type) => { onInsert(index, pos, type); setMenuOpen(false); }} />
-          <InsertSubmenu position="after" onInsert={(pos, type) => { onInsert(index, pos, type); setMenuOpen(false); }} />
-          <li className="border-t border-gray-50 my-1" />
-          <li>
-            <button type="button" onClick={() => { onDuplicate(index); setMenuOpen(false); }}
-              className="w-full text-left px-4 py-1.5 text-gray-700 hover:bg-gray-50">
-              Dupliquer
-            </button>
-          </li>
-          <li className="border-t border-gray-50 my-1" />
-          <li>
-            <button type="button" onClick={() => { onRemove(index); setMenuOpen(false); }}
-              className="w-full text-left px-4 py-1.5 text-red-600 hover:bg-red-50">
-              Supprimer
-            </button>
-          </li>
-        </ul>
-      )}
+        </div>
+      </div>
     </div>
   );
 }
 
-/* ─── Line Items Editor ──────────────────────────────────────────────────── */
+/* Line Items Editor */
 interface LineItemsEditorProps {
   items: LineItemData[];
   onChange: (items: LineItemData[]) => void;
@@ -487,14 +483,7 @@ interface LineItemsEditorProps {
 }
 
 function newItem(type: ItemType = 'supply'): LineItemData {
-  return {
-    description: '',
-    item_type: type,
-    quantity: 1,
-    unit: 'u',
-    unit_price: 0,
-    vat_rate: 20,
-  };
+  return { description: '', item_type: type, quantity: 1, unit: 'u', unit_price: 0, vat_rate: 20 };
 }
 
 export function LineItemsEditor({ items, onChange, priceLibrary = [] }: LineItemsEditorProps) {
@@ -542,68 +531,93 @@ export function LineItemsEditor({ items, onChange, priceLibrary = [] }: LineItem
     setShowLibrary(false);
   };
 
+  const totalHT = items.reduce((sum, it) => {
+    if (['section', 'text', 'page_break'].includes(it.item_type)) return sum;
+    const disc = it.discount_percent ?? 0;
+    return sum + (it.quantity ?? 0) * (it.unit_price ?? 0) * (1 - disc / 100);
+  }, 0);
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {items.length === 0 && (
-        <div className="text-center py-10 text-gray-400 border-2 border-dashed border-gray-100 rounded-xl">
-          <svg className="w-8 h-8 mx-auto mb-2 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <p className="text-sm">Aucune ligne. Ajoutez des prestations ci-dessous.</p>
+        <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50/30">
+          <div className="w-14 h-14 mx-auto mb-3 bg-violet-50 rounded-xl flex items-center justify-center">
+            <svg className="w-7 h-7 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <p className="text-sm font-medium text-gray-500 mb-1">Aucune ligne ajout\u00e9e</p>
+          <p className="text-xs text-gray-400">Ajoutez des prestations, fournitures ou sections ci-dessous.</p>
         </div>
       )}
+
       {items.map((item, index) => (
-        <LineItemRow
-          key={index}
-          item={item}
-          index={index}
-          total={items.length}
-          onUpdate={update}
-          onRemove={remove}
-          onMoveUp={moveUp}
-          onMoveDown={moveDown}
-          onInsert={insert}
-          onDuplicate={duplicate}
-        />
+        <LineItemRow key={index} item={item} index={index} total={items.length}
+          onUpdate={update} onRemove={remove} onMoveUp={moveUp} onMoveDown={moveDown} onInsert={insert} onDuplicate={duplicate} />
       ))}
 
-      {/* Add buttons */}
+      {items.length > 0 && (
+        <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-violet-50 to-blue-50 rounded-xl border border-violet-100">
+          <span className="text-xs font-semibold text-gray-500">{items.filter(i => !['section', 'text', 'page_break'].includes(i.item_type)).length} ligne(s)</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Total HT</span>
+            <span className="text-base font-extrabold text-gray-900">
+              {totalHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+            </span>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2 pt-1">
         <button type="button" onClick={() => addNew('supply')}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors border border-blue-100">
-          + Fourniture
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3.5 py-2 rounded-xl transition-all border border-blue-100 shadow-sm hover:shadow">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+          Fourniture
         </button>
         <button type="button" onClick={() => addNew('labor')}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-orange-600 hover:text-orange-800 hover:bg-orange-50 px-3 py-1.5 rounded-lg transition-colors border border-orange-100">
-          + Main d&apos;\u0153uvre
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-600 hover:text-orange-800 bg-orange-50 hover:bg-orange-100 px-3.5 py-2 rounded-xl transition-all border border-orange-100 shadow-sm hover:shadow">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+          Main d&apos;\u0153uvre
+        </button>
+        <button type="button" onClick={() => addNew('work')}
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-violet-600 hover:text-violet-800 bg-violet-50 hover:bg-violet-100 px-3.5 py-2 rounded-xl transition-all border border-violet-100 shadow-sm hover:shadow">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+          Ouvrage
         </button>
         <button type="button" onClick={() => addNew('section')}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors border border-slate-200">
-          + Section
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 px-3.5 py-2 rounded-xl transition-all border border-slate-200 shadow-sm hover:shadow">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" /></svg>
+          Section
         </button>
-        {/* Dropdown for more types */}
         <MoreTypesButton onAdd={addNew} />
         {priceLibrary.length > 0 && (
           <button type="button" onClick={() => setShowLibrary(v => !v)}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-purple-600 hover:text-purple-800 hover:bg-purple-50 px-3 py-1.5 rounded-lg transition-colors border border-purple-100">
-            \u2605 Biblioth\u00e8que prix
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 px-3.5 py-2 rounded-xl transition-all border border-purple-100 shadow-sm hover:shadow">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
+            Biblioth\u00e8que prix
           </button>
         )}
       </div>
 
-      {/* Price library */}
       {showLibrary && priceLibrary.length > 0 && (
-        <div className="mt-2 p-3 bg-purple-50 rounded-xl border border-purple-100">
-          <p className="text-xs font-semibold text-purple-700 mb-2">S\u00e9lectionner depuis la biblioth\u00e8que</p>
-          <div className="flex flex-wrap gap-2">
+        <div className="mt-2 p-4 bg-purple-50/60 rounded-2xl border border-purple-100">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-bold text-purple-700 uppercase tracking-wider">S\u00e9lectionner depuis la biblioth\u00e8que</p>
+            <button type="button" onClick={() => setShowLibrary(false)} className="text-purple-400 hover:text-purple-600 transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {priceLibrary.map((lib, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => addFromLibrary(lib)}
-                className="text-xs bg-white border border-purple-200 text-purple-800 px-3 py-1 rounded-lg hover:bg-purple-50 transition-colors"
-              >
-                \u2605 {lib.description}
+              <button key={i} type="button" onClick={() => addFromLibrary(lib)}
+                className="flex items-center gap-3 text-left bg-white border border-purple-200 text-purple-800 px-3 py-2.5 rounded-xl hover:bg-purple-50 hover:shadow-sm transition-all">
+                <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold truncate">{lib.description}</p>
+                  <p className="text-xs text-purple-500">{lib.unit_price?.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} / {lib.unit || 'u'}</p>
+                </div>
               </button>
             ))}
           </div>
@@ -622,29 +636,30 @@ function MoreTypesButton({ onAdd }: { onAdd: (type: ItemType) => void }) {
     return () => document.removeEventListener('mousedown', h);
   }, [open]);
 
-  const MORE = ITEM_TYPES.filter(t => !['supply', 'labor', 'section'].includes(t.value));
+  const MORE = ITEM_TYPES.filter(t => !['supply', 'labor', 'work', 'section'].includes(t.value));
   return (
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen(v => !v)}
-        className="inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 px-3 py-1.5 rounded-lg transition-colors border border-gray-200">
-        + Autre
-        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 px-3.5 py-2 rounded-xl transition-all border border-gray-200 shadow-sm hover:shadow">
+        Autre type
+        <svg className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
       {open && (
-        <ul className="absolute bottom-full mb-1 left-0 w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-40">
-          {MORE.map(t => (
-            <li key={t.value}>
-              <button
-                type="button"
-                onClick={() => { onAdd(t.value as ItemType); setOpen(false); }}
-                className="w-full text-left px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-              >
-                {t.label}
-              </button>
-            </li>
-          ))}
+        <ul className="absolute bottom-full mb-1 left-0 w-48 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-40">
+          {MORE.map(t => {
+            const st = TYPE_STYLE[t.value];
+            return (
+              <li key={t.value}>
+                <button type="button" onClick={() => { onAdd(t.value as ItemType); setOpen(false); }}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors">
+                  <span className={`w-2 h-2 rounded-full ${st?.dot || 'bg-gray-300'}`} />
+                  {t.label}
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

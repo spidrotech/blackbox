@@ -8,6 +8,7 @@ import { invoiceService, quoteService, customerService, projectService, settings
 import { InvoiceCreate, Quote, Customer, Project, LineItem, LineItemType } from '@/types';
 import { LineItemsEditor, LineItemData } from '@/components/quotes/LineItemsEditor';
 import InvoicePreview, { InvoicePreviewData, InvoiceCustomer, InvoiceCompany } from '@/components/invoices/InvoicePreview';
+import { PdfSettingsCard } from '@/components/documents/PdfSettingsCard';
 import {
   CompanySettingsData,
   getDocumentDefaultsFromCompany,
@@ -75,6 +76,7 @@ function NewInvoicePageContent() {
   const [dataLoading, setDataLoading] = useState(true);
   const [tab, setTab] = useState<'edit' | 'preview'>('edit');
   const [company, setCompany] = useState<InvoiceCompany | null>(null);
+  const [companySettings, setCompanySettings] = useState<CompanySettingsData | null>(null);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -124,6 +126,7 @@ function NewInvoicePageContent() {
 
       if (companyRes.success && companyRes.data) {
         const companyData = companyRes.data as CompanySettingsData;
+        setCompanySettings(companyData);
         setCompany(mapCompanySettingsToDocumentCompany(companyData) as InvoiceCompany);
         const defaults = getDocumentDefaultsFromCompany(companyData);
         setFormData(prev => ({
@@ -279,15 +282,20 @@ function NewInvoicePageContent() {
           </div>
         </div>
 
+        <PdfSettingsCard company={companySettings} documentLabel="facture" />
+
         {/* Preview tab */}
         {tab === 'preview' && (() => {
           const previewCustomer = customers.find(c => c.id === formData.customer_id);
           const previewData: InvoicePreviewData = {
             invoiceDate: formData.invoice_date,
             dueDate: formData.due_date,
+            purchaseOrder: formData.purchase_order,
             description: formData.subject ?? '',
             notes: formData.notes ?? '',
             conditions: formData.terms_and_conditions,
+            bankDetails: formData.bank_details,
+            discountPercent: formData.discount_percent,
             lineItems,
             company,
             customer: previewCustomer
@@ -447,6 +455,18 @@ function NewInvoicePageContent() {
                   onChange={handleChange}
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Conditions de paiement</label>
+                <textarea
+                  name="payment_terms"
+                  rows={2}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={formData.payment_terms ?? ''}
+                  onChange={handleChange}
+                  placeholder="Ex : Paiement à 30 jours fin de mois"
+                />
+              </div>
+              
             </CardContent>
           </Card>
 

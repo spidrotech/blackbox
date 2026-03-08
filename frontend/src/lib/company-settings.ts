@@ -10,6 +10,8 @@ export interface CompanySettingsData {
   email?: string;
   website?: string;
   logo_url?: string;
+  header_text?: string;
+  footer_text?: string;
   iban?: string;
   bic?: string;
   rcs_city?: string;
@@ -44,6 +46,7 @@ export interface DocumentDefaults {
   paymentTerms: string;
   bankDetails: string;
   legalMentions: string;
+  footerNotes: string;
 }
 
 export const mapCompanySettingsToDocumentCompany = (
@@ -86,5 +89,6 @@ export const getDocumentDefaultsFromCompany = (
     paymentTerms,
     bankDetails,
     legalMentions,
+    footerNotes: '',
   };
 };

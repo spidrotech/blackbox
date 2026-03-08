@@ -114,8 +114,8 @@ export function NewCustomerForm({ onSuccess, onClose }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (kind === 'individual' && !firstName && !lastName) { setError('Le nom ou prÃ©nom est requis.'); return; }
-    if (kind === 'company' && !companyName) { setError('Le nom de la sociÃ©tÃ© est requis.'); return; }
+    if (kind === 'individual' && !firstName && !lastName) { setError('Le nom ou prénom est requis.'); return; }
+    if (kind === 'company' && !companyName) { setError('Le nom de la société est requis.'); return; }
     setLoading(true);
     try {
       const payload: Record<string, unknown> = {
@@ -149,15 +149,15 @@ export function NewCustomerForm({ onSuccess, onClose }: Props) {
       });
       const result = await response.json();
       if (result.success) { onSuccess(); onClose(); }
-      else setError(result.detail || 'Erreur lors de la crÃ©ation.');
+      else setError(result.detail || 'Erreur lors de la création.');
     } catch {
-      setError('Erreur rÃ©seau.');
+      setError('Erreur réseau.');
     } finally {
       setLoading(false);
     }
   };
 
-  /* â”€â”€ helpers â”€â”€ */
+  /* helpers */
   const Lbl = ({ children, req }: { children: React.ReactNode; req?: boolean }) => (
     <label className="block text-xs font-medium text-slate-600 mb-1">
       {children}{req && <span className="text-red-500 ml-0.5">*</span>}
@@ -190,7 +190,7 @@ export function NewCustomerForm({ onSuccess, onClose }: Props) {
           {/* Company search (professional) */}
           {kind === 'company' && (
             <div className="relative">
-              <Lbl req>Nom de la sociÃ©tÃ©</Lbl>
+              <Lbl req>Nom de la société</Lbl>
               <div className="relative">
                 <input type="text" value={companyName}
                   onChange={e => handleCompanyNameChange(e.target.value)}
@@ -213,7 +213,7 @@ export function NewCustomerForm({ onSuccess, onClose }: Props) {
                       <div className="font-medium text-sm text-slate-800">{c.name}</div>
                       <div className="text-xs text-slate-500 mt-0.5 flex gap-2">
                         {c.siret && <span>SIRET {c.siret}</span>}
-                        {c.city && <span>Â· {c.postalCode} {c.city}</span>}
+                        {c.city && <span>· {c.postalCode} {c.city}</span>}
                       </div>
                     </li>
                   ))}
@@ -222,9 +222,9 @@ export function NewCustomerForm({ onSuccess, onClose }: Props) {
             </div>
           )}
 
-          {/* CivilitÃ© */}
+          {/* Civilité */}
           <div>
-            <Lbl>{kind === 'company' ? 'CivilitÃ© du contact' : 'CivilitÃ©'}</Lbl>
+            <Lbl>{kind === 'company' ? 'Civilité du contact' : 'Civilité'}</Lbl>
             <div className="flex gap-2">
               {(['M.', 'Mme', 'Autre'] as Civility[]).map(c => (
                 <button key={c} type="button" onClick={() => setCivility(c)}
@@ -237,7 +237,7 @@ export function NewCustomerForm({ onSuccess, onClose }: Props) {
             </div>
           </div>
 
-          {/* Nom & PrÃ©nom */}
+          {/* Nom & Prénom */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Lbl req={kind === 'individual'}>Nom</Lbl>
@@ -247,7 +247,7 @@ export function NewCustomerForm({ onSuccess, onClose }: Props) {
               />
             </div>
             <div>
-              <Lbl>PrÃ©nom</Lbl>
+              <Lbl>Prénom</Lbl>
               <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)}
                 placeholder="Jean"
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -266,7 +266,7 @@ export function NewCustomerForm({ onSuccess, onClose }: Props) {
                 />
               </div>
               <div>
-                <Lbl>NumÃ©ro de TVA</Lbl>
+                <Lbl>Numéro de TVA</Lbl>
                 <input type="text" value={vatNumber} onChange={e => setVatNumber(e.target.value)}
                   placeholder="FR12345678901"
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -279,7 +279,7 @@ export function NewCustomerForm({ onSuccess, onClose }: Props) {
           <div className="space-y-2.5">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Adresse</p>
             <AddressAutocomplete
-              label="Rue et nÂ° de rue"
+              label="Rue et n° de rue"
               value={addr.street}
               onChange={v => setAddr(p => ({ ...p, street: v }))}
               onSelect={handleAddressSelect}
@@ -287,7 +287,7 @@ export function NewCustomerForm({ onSuccess, onClose }: Props) {
             />
             <input type="text" value={addr.street2}
               onChange={e => setAddr(p => ({ ...p, street2: e.target.value }))}
-              placeholder="ComplÃ©ment d'adresse (BÃ¢t, Appt...)"
+              placeholder="Complément d'adresse (Bât, Appt...)"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <div className="grid grid-cols-5 gap-2">
@@ -321,10 +321,10 @@ export function NewCustomerForm({ onSuccess, onClose }: Props) {
                 />
               </div>
               <div>
-                <Lbl>TÃ©lÃ©phone</Lbl>
+                <Lbl>Téléphone</Lbl>
                 <div className="flex">
                   <span className="inline-flex items-center px-2.5 rounded-l-lg border border-r-0 border-slate-300 bg-slate-50 text-sm text-slate-600 gap-1 shrink-0">
-                    ðŸ‡«ðŸ‡· <span className="text-xs">+33</span>
+                    🇫🇷 <span className="text-xs">+33</span>
                   </span>
                   <input type="tel" value={phone} onChange={e => setPhone(e.target.value)}
                     placeholder="06 12 34 56 78"
@@ -339,7 +339,7 @@ export function NewCustomerForm({ onSuccess, onClose }: Props) {
           <div>
             <Lbl>Notes</Lbl>
             <textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)}
-              placeholder="Informations complÃ©mentaires..."
+              placeholder="Informations complémentaires..."
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
           </div>

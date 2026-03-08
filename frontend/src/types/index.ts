@@ -317,6 +317,9 @@ export interface Invoice {
   payment_terms?: string;
   bank_details?: string;
   invoice_type?: string;
+  original_invoice_id?: number;
+  facturx_status?: string;
+  siren_buyer?: string;
   customer_id?: number;
   customer?: Customer;
   project_id?: number;
@@ -343,6 +346,9 @@ export interface Invoice {
   purchase_order?: string;
   conditions?: string;
   invoiceType?: string;
+  originalInvoiceId?: number;
+  facturxStatus?: string;
+  sirenBuyer?: string;
   customerId?: number;
   projectId?: number;
   quoteId?: number;
@@ -568,6 +574,18 @@ export interface PriceLibraryItemCreate {
   reference?: string;
   brand?: string;
   cost_price?: number;
+}
+
+export interface PriceLibraryImportPayload {
+  items: PriceLibraryItemCreate[];
+  upsert?: boolean;
+}
+
+export interface PriceLibraryImportResult {
+  created: number;
+  updated: number;
+  skipped: number;
+  total: number;
 }
 
 // Dashboard types

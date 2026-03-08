@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
 import Link from 'next/link';
 import { MainLayout } from '@/components/layout';
 import { invoiceService, customerService } from '@/services/api';
@@ -11,12 +12,13 @@ import { buildDetailPath, buildEditPath } from '@/lib/routes';
 /* ─── Constants ─────────────────────────────────────────────── */
 
 const BADGE: Record<string, { label: string; cls: string; dot: string }> = {
-  draft:    { label: 'Brouillon', cls: 'bg-gray-100 text-gray-600',      dot: 'bg-gray-400' },
-  sent:     { label: 'Envoyée',   cls: 'bg-blue-50 text-blue-700',       dot: 'bg-blue-500' },
-  partial:  { label: 'Partielle', cls: 'bg-amber-50 text-amber-700',     dot: 'bg-amber-400' },
-  paid:     { label: 'Payée',     cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  overdue:  { label: 'En retard', cls: 'bg-red-50 text-red-700',         dot: 'bg-red-500' },
-  cancelled:{ label: 'Annulée',   cls: 'bg-gray-100 text-gray-400',      dot: 'bg-gray-300' },
+  draft:     { label: 'Brouillon', cls: 'bg-slate-50 text-slate-600 ring-1 ring-slate-200', dot: 'bg-slate-400' },
+  sent:      { label: 'Envoyé',    cls: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200', dot: 'bg-blue-500' },
+  viewed:    { label: 'Consulté',  cls: 'bg-purple-50 text-purple-700 ring-1 ring-purple-200', dot: 'bg-purple-500' },
+  paid:      { label: 'Payée',     cls: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', dot: 'bg-emerald-500' },
+  partially_paid: { label: 'Partiel', cls: 'bg-teal-50 text-teal-700 ring-1 ring-teal-200', dot: 'bg-teal-500' },
+  overdue:   { label: 'En retard', cls: 'bg-red-50 text-red-700 ring-1 ring-red-200', dot: 'bg-red-500' },
+  cancelled: { label: 'Annulée',   cls: 'bg-gray-50 text-gray-500 ring-1 ring-gray-200', dot: 'bg-gray-400' },
 };
 
 const TABS = [
@@ -209,6 +211,13 @@ export default function InvoicesPage() {
   const handleSend = async (id: number) => {
     try { await invoiceService.send(id); loadData(); }
     catch (e) { console.error(e); }
+  };
+
+  const handleDuplicate = async (id: number) => {
+    try {
+      const res = await invoiceService.duplicate(id);
+      if (res.success) loadData();
+    } catch (e) { console.error(e); }
   };
 
   // ── KPIs ──
@@ -525,6 +534,10 @@ export default function InvoicesPage() {
                                 Encaisser
                               </Link>
                             )}
+                            <button onClick={() => handleDuplicate(invoice.id)}
+                              className="px-2.5 py-1 text-xs font-medium text-violet-600 bg-violet-50 hover:bg-violet-100 rounded-lg transition-colors">
+                              Dupliquer
+                            </button>
                           </div>
                         </td>
                       </tr>

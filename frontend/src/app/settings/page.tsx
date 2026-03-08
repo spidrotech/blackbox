@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 import { API_BASE_URL, settingsService } from '@/services/api';
 
 type MainTab = 'entreprise' | 'documents' | 'utilisateurs' | 'connexion';
@@ -72,6 +73,14 @@ export default function SettingsPage() {
   const router = useRouter();
   const [mainTab, setMainTab] = useState<MainTab>('entreprise');
   const [documentTab, setDocumentTab] = useState<DocumentTab>('entetes');
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    const doc = params.get('doc');
+    if (tab) setMainTab(tab as MainTab);
+    if (doc) setDocumentTab(doc as DocumentTab);
+  }, []);
   const [company, setCompany] = useState<CompanySettings | null>(null);
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
