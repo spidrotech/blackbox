@@ -1,9 +1,13 @@
 'use client';
 
-import { Suspense, useState, useEffect } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
+import { DocumentCompletionCard } from '@/components/documents/DocumentCompletionCard';
+import { DocumentTemplatePicker } from '@/components/documents/DocumentTemplatePicker';
+import { PresetChips } from '@/components/documents/PresetChips';
+import { UnsavedChangesBadge } from '@/components/documents/UnsavedChangesBadge';
 import { invoiceService, quoteService, customerService, projectService, settingsService } from '@/services/api';
 import { InvoiceCreate, Quote, Customer, Project, LineItem, LineItemType } from '@/types';
 import { LineItemsEditor, LineItemData } from '@/components/quotes/LineItemsEditor';
@@ -15,6 +19,7 @@ import {
   mapCompanySettingsToDocumentCompany,
 } from '@/lib/company-settings';
 import { buildDetailPath } from '@/lib/routes';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 type ApiListResponse<T> = {
   data?: T[];
@@ -71,6 +76,7 @@ function NewInvoicePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const quoteIdParam = searchParams.get('quoteId');
+  const draftHydratedRef = useRef(false);
 
   const [loading, setLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
@@ -82,6 +88,7 @@ function NewInvoicePageContent() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [fromQuote, setFromQuote] = useState<boolean>(false);
   const [lineItems, setLineItems] = useState<LineItemData[]>([]);
+  const [draftMessage, setDraftMessage] = useState('');
 
   const today = new Date().toISOString().split('T')[0];
   const thirtyDays = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0];
@@ -101,6 +108,14 @@ function NewInvoicePageContent() {
     line_items: [],
   });
 
+  const INVOICE_DRAFT_KEY = 'blackbox.invoice.create.draft.v2';
+  const { isDirty, captureBaseline, confirmIfDirty } = useUnsavedChanges({ formData, lineItems });
+
+  const clearDraft = () => {
+    localStorage.removeItem(INVOICE_DRAFT_KEY);
+    setDraftMessage('Brouillon supprimé.');
+  };
+
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -108,6 +123,8 @@ function NewInvoicePageContent() {
 
   const loadData = async () => {
     setDataLoading(true);
+    let baseline = { formData, lineItems };
+
     try {
       const [quotesRes, customersRes, projectsRes, companyRes] = await Promise.all([
         quoteService.getAll(),
@@ -129,24 +146,84 @@ function NewInvoicePageContent() {
         setCompanySettings(companyData);
         setCompany(mapCompanySettingsToDocumentCompany(companyData) as InvoiceCompany);
         const defaults = getDocumentDefaultsFromCompany(companyData);
-        setFormData(prev => ({
-          ...prev,
-          terms_and_conditions: prev.terms_and_conditions || defaults.conditions,
-          payment_terms: prev.payment_terms || defaults.paymentTerms,
-          bank_details: prev.bank_details || defaults.bankDetails,
-        }));
+        const baseData = {
+          ...formData,
+          terms_and_conditions: formData.terms_and_conditions || defaults.conditions,
+          payment_terms: formData.payment_terms || defaults.paymentTerms,
+          bank_details: formData.bank_details || defaults.bankDetails,
+        };
+
+        const savedDraft = localStorage.getItem(INVOICE_DRAFT_KEY);
+        if (savedDraft) {
+          try {
+            const parsed = JSON.parse(savedDraft) as {
+              formData?: InvoiceCreate & { invoice_date?: string; due_date?: string };
+              lineItems?: LineItemData[];
+            };
+            const restoredFormData = { ...baseData, ...(parsed.formData || {}) };
+            const restoredLineItems = Array.isArray(parsed.lineItems) ? parsed.lineItems : [];
+            setFormData(restoredFormData);
+            setLineItems(restoredLineItems);
+            baseline = { formData: restoredFormData, lineItems: restoredLineItems };
+            setDraftMessage('Brouillon restauré automatiquement.');
+          } catch (error) {
+            console.error('Error restoring invoice draft:', error);
+            setFormData(baseData);
+            baseline = { formData: baseData, lineItems: [] };
+          }
+        } else {
+          setFormData(baseData);
+          baseline = { formData: baseData, lineItems: [] };
+        }
       }
 
       if (quoteIdParam) {
         const q = allQuotes.find(q => q.id === parseInt(quoteIdParam));
-        if (q) importQuote(q);
+        if (q) {
+          const quoteWithExtras = q as Quote & { discount_percent?: number; subject?: string };
+          const importedLineItems = (q.line_items ?? []).map(item => toLineItemData(item as LineItemLike));
+          const importedFormData = {
+            ...baseline.formData,
+            quote_id: q.id,
+            customer_id: q.customer_id ?? baseline.formData.customer_id,
+            project_id: q.project_id ?? baseline.formData.project_id,
+            discount_percent: quoteWithExtras.discount_percent ?? baseline.formData.discount_percent,
+            subject: quoteWithExtras.subject ?? baseline.formData.subject,
+          };
+          setFromQuote(true);
+          setLineItems(importedLineItems);
+          setFormData(importedFormData);
+          baseline = { formData: importedFormData, lineItems: importedLineItems };
+        }
       }
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
+      captureBaseline(baseline);
       setDataLoading(false);
+      draftHydratedRef.current = true;
     }
   };
+
+  useEffect(() => {
+    if (!draftHydratedRef.current) return;
+
+    const hasMeaningfulData = Boolean(
+      formData.customer_id
+      || (formData.subject || '').trim()
+      || (formData.notes || '').trim()
+      || lineItems.length > 0
+    );
+
+    if (!hasMeaningfulData) return;
+
+    const timeout = setTimeout(() => {
+      localStorage.setItem(INVOICE_DRAFT_KEY, JSON.stringify({ formData, lineItems, updatedAt: new Date().toISOString() }));
+      setDraftMessage('Brouillon enregistré localement.');
+    }, 500);
+
+    return () => clearTimeout(timeout);
+  }, [formData, lineItems]);
 
   const importQuote = (quote: Quote) => {
     const quoteWithExtras = quote as Quote & { discount_percent?: number; subject?: string };
@@ -202,6 +279,53 @@ function NewInvoicePageContent() {
       return sum + lineHt * i.vat_rate / 100;
     }, 0);
   const totalTTC = totalHtAfterDiscount + totalVAT;
+  const invoiceReadiness = [
+    { label: 'Client sélectionné', done: Boolean(formData.customer_id), helper: 'Rattache la facture au bon client.' },
+    { label: 'Objet renseigné', done: Boolean((formData.subject || '').trim()), helper: 'Clarifie le document et facilite la recherche.' },
+    { label: 'Date d’échéance définie', done: Boolean(formData.due_date), helper: 'Indispensable pour le recouvrement et les relances.' },
+    { label: 'Au moins une ligne chiffrée', done: lineItems.some((item) => !['section', 'text', 'page_break'].includes(item.item_type)), helper: 'La facture doit contenir un montant facturable.' },
+    { label: 'Conditions de paiement', done: Boolean((formData.payment_terms || '').trim()), helper: 'Ex. à réception, 30 jours, acompte.' },
+    { label: 'Paramètres PDF configurés', done: Boolean(companySettings?.logo_url || companySettings?.header_text || companySettings?.footer_text || companySettings?.iban), helper: 'Logo, entête, pied de page ou banque.' },
+  ];
+
+  const invoiceTemplates = [
+    {
+      label: 'Facture classique',
+      description: 'Base standard pour une facturation nette, claire et rapide à envoyer.',
+      bullets: ['Échéance 30 jours', 'Texte de règlement standard', 'Message client simple'],
+      accent: 'blue' as const,
+      onApply: () => setFormData(prev => ({
+        ...prev,
+        subject: prev.subject || 'Facture travaux réalisés',
+        payment_terms: 'Paiement à 30 jours fin de mois.',
+        notes: prev.notes || 'Merci pour votre confiance.',
+      })),
+    },
+    {
+      label: 'Facture de situation',
+      description: 'Idéale pour l’avancement de chantier, appels de fonds et situations intermédiaires.',
+      bullets: ['Situation chantier', 'Paiement à réception', 'Texte d’avancement'],
+      accent: 'violet' as const,
+      onApply: () => setFormData(prev => ({
+        ...prev,
+        subject: prev.subject || 'Facture de situation',
+        payment_terms: 'Paiement à réception de facture.',
+        notes: 'Facture correspondant à l’avancement du chantier selon situation validée.',
+      })),
+    },
+    {
+      label: 'Solde de chantier',
+      description: 'Format de clôture avec message final et encaissement rapide du solde.',
+      bullets: ['Solde final', 'Règlement à réception', 'Remerciement client'],
+      accent: 'emerald' as const,
+      onApply: () => setFormData(prev => ({
+        ...prev,
+        subject: prev.subject || 'Facture de solde de chantier',
+        payment_terms: 'Solde payable à réception de facture.',
+        notes: 'Nous vous remercions pour votre confiance et restons disponibles pour toute question.',
+      })),
+    },
+  ];
 
   const fmt = (n: number) => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 
@@ -220,6 +344,8 @@ function NewInvoicePageContent() {
       };
       const res = await invoiceService.create(payload);
       if (res.success && res.data) {
+        localStorage.removeItem(INVOICE_DRAFT_KEY);
+        captureBaseline({ formData, lineItems });
         router.push(buildDetailPath('invoices', res.data.id));
       }
     } catch (error) {
@@ -271,6 +397,9 @@ function NewInvoicePageContent() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Nouvelle facture</h1>
             <p className="text-gray-500 text-sm mt-1">Créer une facture à partir d&apos;un devis ou manuellement</p>
+            <div className="mt-2">
+              <UnsavedChangesBadge isDirty={isDirty} />
+            </div>
           </div>
           <div className="flex rounded-lg border border-gray-200 overflow-hidden">
             <button type="button" onClick={() => setTab('edit')} className={`px-4 py-2 text-sm font-medium transition-colors ${ tab === 'edit' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50' }`}>
@@ -282,7 +411,18 @@ function NewInvoicePageContent() {
           </div>
         </div>
 
+        <DocumentTemplatePicker
+          title="Démarrer avec un modèle de facture"
+          subtitle="Sélectionnez une base adaptée, puis complétez chaque étape avec les bons détails métier."
+          templates={invoiceTemplates}
+        />
+
         <PdfSettingsCard company={companySettings} documentLabel="facture" />
+        <DocumentCompletionCard
+          title="Complétude de la facture"
+          subtitle="Vue synthétique avant création et envoi au client."
+          items={invoiceReadiness}
+        />
 
         {/* Preview tab */}
         {tab === 'preview' && (() => {
@@ -314,7 +454,9 @@ function NewInvoicePageContent() {
 
           {/* Source */}
           <Card>
-            <CardHeader><CardTitle>Source</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Source</CardTitle>
+              <p className="text-sm text-slate-500">Étape 1 · importez un devis existant ou démarrez une facture totalement manuelle.</p>
+            </CardHeader>
             <CardContent>
               <Select
                 label="Importer depuis un devis"
@@ -331,7 +473,9 @@ function NewInvoicePageContent() {
 
           {/* Client and project */}
           <Card>
-            <CardHeader><CardTitle>Client et projet</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Client et projet</CardTitle>
+              <p className="text-sm text-slate-500">Étape 2 · confirmez le client facturé et le projet concerné.</p>
+            </CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Select
                 label="Client *"
@@ -354,7 +498,9 @@ function NewInvoicePageContent() {
 
           {/* Dates and subject */}
           <Card>
-            <CardHeader><CardTitle>Détails</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Détails</CardTitle>
+              <p className="text-sm text-slate-500">Étape 3 · définissez l’objet, la date d’émission et l’échéance client.</p>
+            </CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Input
                 label="Objet"
@@ -378,11 +524,23 @@ function NewInvoicePageContent() {
                 onChange={handleChange}
               />
             </CardContent>
+              <CardContent className="pt-0">
+                <PresetChips
+                  label="Délais rapides"
+                  options={[
+                    { label: '15 jours', onClick: () => setFormData(prev => ({ ...prev, due_date: new Date(new Date(prev.invoice_date || today).getTime() + 15 * 24 * 3600 * 1000).toISOString().split('T')[0] })), active: Boolean(formData.invoice_date && formData.due_date === new Date(new Date(formData.invoice_date).getTime() + 15 * 24 * 3600 * 1000).toISOString().split('T')[0]) },
+                    { label: '30 jours', onClick: () => setFormData(prev => ({ ...prev, due_date: new Date(new Date(prev.invoice_date || today).getTime() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0] })), active: Boolean(formData.invoice_date && formData.due_date === new Date(new Date(formData.invoice_date).getTime() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0]) },
+                    { label: '45 jours', onClick: () => setFormData(prev => ({ ...prev, due_date: new Date(new Date(prev.invoice_date || today).getTime() + 45 * 24 * 3600 * 1000).toISOString().split('T')[0] })), active: Boolean(formData.invoice_date && formData.due_date === new Date(new Date(formData.invoice_date).getTime() + 45 * 24 * 3600 * 1000).toISOString().split('T')[0]) },
+                  ]}
+                />
+              </CardContent>
           </Card>
 
           {/* Line items */}
           <Card>
-            <CardHeader><CardTitle>Lignes de facturation</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Lignes de facturation</CardTitle>
+              <p className="text-sm text-slate-500">Étape 4 · ajustez précisément les postes, quantités, unités, remises et TVA.</p>
+            </CardHeader>
             <CardContent className="p-0 sm:p-0">
               <LineItemsEditor items={lineItems} onChange={setLineItems} />
             </CardContent>
@@ -432,7 +590,9 @@ function NewInvoicePageContent() {
 
           {/* Notes and terms */}
           <Card>
-            <CardHeader><CardTitle>Notes et conditions</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Notes et conditions</CardTitle>
+              <p className="text-sm text-slate-500">Étape 5 · finalisez le message client, les conditions générales et les modalités de paiement.</p>
+            </CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes (visibles sur la facture)</label>
@@ -466,13 +626,37 @@ function NewInvoicePageContent() {
                   placeholder="Ex : Paiement à 30 jours fin de mois"
                 />
               </div>
+              <PresetChips
+                label="Formules rapides"
+                options={[
+                  { label: 'À réception', onClick: () => setFormData(prev => ({ ...prev, payment_terms: 'Paiement à réception de facture.' })), active: formData.payment_terms === 'Paiement à réception de facture.' },
+                  { label: '30 jours', onClick: () => setFormData(prev => ({ ...prev, payment_terms: 'Paiement à 30 jours fin de mois.' })), active: formData.payment_terms === 'Paiement à 30 jours fin de mois.' },
+                  { label: 'Virement SEPA', onClick: () => setFormData(prev => ({ ...prev, payment_terms: 'Paiement par virement SEPA.' })), active: formData.payment_terms === 'Paiement par virement SEPA.' },
+                ]}
+              />
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Les coordonnées bancaires et le pied de page sont repris depuis les paramètres PDF pour éviter toute double saisie.
+              </div>
               
             </CardContent>
           </Card>
 
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold text-slate-900">Brouillon local</p>
+                <p className="mt-1 text-xs text-slate-500">La facture en cours est sauvegardée localement pendant toute la saisie.</p>
+              </div>
+              <button type="button" onClick={clearDraft} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600">
+                Vider le brouillon
+              </button>
+            </div>
+            {draftMessage && <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">{draftMessage}</p>}
+          </div>
+
           {/* Actions */}
           <div className="flex justify-end gap-3 pb-6">
-            <Button type="button" variant="outline" onClick={() => router.push('/invoices')}>
+            <Button type="button" variant="outline" onClick={() => { if (confirmIfDirty()) router.push('/invoices'); }}>
               Annuler
             </Button>
             <Button type="button" variant="outline" onClick={() => setTab('preview')}>

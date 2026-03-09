@@ -18,26 +18,27 @@ router = APIRouter()
 
 def get_item_response(item: PriceLibraryItem) -> dict:
     """Formatte la réponse article"""
+    item_type_val = item.item_type.value if hasattr(item.item_type, 'value') else str(item.item_type)
     return {
         "id": item.id,
-        "companyId": item.company_id,
+        "company_id": item.company_id,
         "name": item.name,
         "description": item.description,
-        "longDescription": item.long_description,
-        "itemType": item.item_type.value,
+        "long_description": item.long_description,
+        "item_type": item_type_val,
         "category": item.category,
         "subcategory": item.subcategory,
         "trade": item.trade,
         "unit": item.unit,
-        "unitPrice": float(item.unit_price),
-        "taxRate": float(item.tax_rate),
+        "unit_price": float(item.unit_price),
+        "tax_rate": float(item.tax_rate),
         "reference": item.reference,
         "brand": item.brand,
-        "costPrice": float(item.cost_price) if item.cost_price else None,
-        "usageCount": item.usage_count,
-        "isFavorite": item.is_favorite,
-        "isActive": item.is_active,
-        "createdAt": item.created_at.isoformat(),
+        "cost_price": float(item.cost_price) if item.cost_price else None,
+        "usage_count": item.usage_count,
+        "is_favorite": item.is_favorite,
+        "is_active": item.is_active,
+        "created_at": item.created_at.isoformat(),
     }
 
 

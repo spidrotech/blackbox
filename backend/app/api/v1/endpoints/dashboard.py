@@ -194,6 +194,28 @@ def get_dashboard(
 
     all_recent_projects = [proj_row(p) for p in projects[:8]]
 
+    # Also include quotes that have a worksite address (shown as "chantiers" in the projects page)
+    quotes_with_worksite = [q for q in quotes if getattr(q, 'worksite_address', None)]
+    quote_worksite_rows = [
+        {
+            "id": q.id,
+            "name": (q.description or q.reference or (f"Devis {q.id}" if q.id is not None else "Devis")) if q else "—",
+            "status": q.status.value if hasattr(q.status, 'value') else str(q.status),
+            "customer_name": customer_map.get(q.customer_id, '') if q.customer_id else '',
+            "worksite_address": q.worksite_address,
+            "type": "quote_worksite",
+            "created_at": q.created_at.isoformat() if q.created_at else None,
+        }
+        for q in quotes_with_worksite
+    ]
+
+    # Merge and sort by creation date (most recent first)
+    all_chantiers = all_recent_projects + quote_worksite_rows
+    all_chantiers.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+
+    # Update counts to include quote worksites
+    worksites_active_count = len([q for q in quotes_with_worksite if q.status not in (QuoteStatus.REJECTED, QuoteStatus.CANCELLED)]) if quotes_with_worksite else 0
+
     return {
         "success": True,
         "data": {
@@ -201,13 +223,13 @@ def get_dashboard(
             "ca_total": round(ca_total, 2),
             "reste_a_encaisser": round(reste, 2),
             "overdue_count": len([i for i in invoices if i.status == InvoiceStatus.OVERDUE]),
-            "projects": {"total": projects_total, "active": projects_active},
+            "projects": {"total": projects_total + len(quotes_with_worksite), "active": projects_active + worksites_active_count},
             "customers": {"total": customers_total},
             "quotes": {"total": len(quotes), "pending": len(pending_quotes), "pendingValue": pending_val},
             "invoices": {"total": len(invoices), "unpaid": len(unpaid_inv), "unpaidValue": round(reste, 2)},
             "revenue": {"total": round(ca_total, 2)},
             "monthlyAnalytics": monthly_analytics,
-            "recentProjects": all_recent_projects[:8],
+            "recentProjects": all_chantiers[:8],
             "recentQuotes": [quote_row(q) for q in quotes[:10]],
             "recentInvoices": [inv_row(i) for i in invoices[:10]],
         }
@@ -261,4 +283,108 @@ def company_profitability(
             "profit": 0,
             "margin": 0,
         }
+    }
+
+
+@router.get("/reports/financial", response_model=dict)
+def get_financial_reports(
+    year: Optional[int] = None,
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session),
+) -> dict:
+    """Rapport financier annuel : CA mensuel, TVA collectée, taux de transformation devis."""
+    from datetime import datetime
+    from collections import defaultdict
+
+    if year is None:
+        year = datetime.now().year
+
+    cid = current_user.company_id
+
+    invoices = session.exec(
+        select(Invoice).where(Invoice.company_id == cid)
+    ).all()
+    quotes = session.exec(
+        select(Quote).where(Quote.company_id == cid)
+    ).all()
+
+    invoice_ids = [i.id for i in invoices if i.id is not None]
+    quote_ids = [q.id for q in quotes if q.id is not None]
+
+    invoice_items = session.exec(
+        select(LineItem).where(col(LineItem.invoice_id).in_(invoice_ids))
+    ).all() if invoice_ids else []
+    quote_items = session.exec(
+        select(LineItem).where(col(LineItem.quote_id).in_(quote_ids))
+    ).all() if quote_ids else []
+
+    # Build totals maps
+    inv_ht: dict[int, float] = defaultdict(float)
+    inv_tva: dict[int, float] = defaultdict(float)
+    for item in invoice_items:
+        if item.invoice_id is not None:
+            inv_ht[item.invoice_id] += float(item.total_ht)
+            inv_tva[item.invoice_id] += float(item.total_tva)
+
+    qt_ttc: dict[int, float] = defaultdict(float)
+    for item in quote_items:
+        if item.quote_id is not None:
+            qt_ttc[item.quote_id] += float(item.total_ttc)
+
+    # Filter by year
+    year_invoices = [i for i in invoices if i.invoice_date and i.invoice_date.year == year]
+    year_quotes = [q for q in quotes if (q.quote_date or (q.created_at.date() if q.created_at else None)) and
+                   (q.quote_date or q.created_at.date()).year == year]
+
+    # Monthly breakdown
+    months_data = []
+    for m in range(1, 13):
+        m_invs = [i for i in year_invoices if i.invoice_date.month == m]
+        paid_ht = sum(inv_ht.get(i.id, 0) for i in m_invs if i.id and i.status == InvoiceStatus.PAID)
+        paid_tva = sum(inv_tva.get(i.id, 0) for i in m_invs if i.id and i.status == InvoiceStatus.PAID)
+        pending_ht = sum(inv_ht.get(i.id, 0) for i in m_invs if i.id and
+                         i.status in (InvoiceStatus.SENT, InvoiceStatus.PARTIAL, InvoiceStatus.OVERDUE))
+        month_quotes = [q for q in year_quotes if (q.quote_date or q.created_at.date()).month == m]
+        quotes_sent = len(month_quotes)
+        quotes_accepted = len([q for q in month_quotes if q.status in (QuoteStatus.ACCEPTED, QuoteStatus.SIGNED, QuoteStatus.FINALIZED)])
+
+        months_data.append({
+            "month": m,
+            "label": ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin",
+                       "Juil", "Août", "Sep", "Oct", "Nov", "Déc"][m - 1],
+            "paidHt": round(paid_ht, 2),
+            "paidTva": round(paid_tva, 2),
+            "paidTtc": round(paid_ht + paid_tva, 2),
+            "pendingHt": round(pending_ht, 2),
+            "quotesSent": quotes_sent,
+            "quotesAccepted": quotes_accepted,
+            "conversionRate": round(quotes_accepted / quotes_sent * 100, 1) if quotes_sent > 0 else 0,
+        })
+
+    # Yearly totals
+    total_paid_ht = sum(m["paidHt"] for m in months_data)
+    total_paid_tva = sum(m["paidTva"] for m in months_data)
+    total_pending_ht = sum(m["pendingHt"] for m in months_data)
+    total_quotes_sent = sum(m["quotesSent"] for m in months_data)
+    total_quotes_accepted = sum(m["quotesAccepted"] for m in months_data)
+
+    # Invoices by status for year
+    status_breakdown = defaultdict(int)
+    for i in year_invoices:
+        status_breakdown[i.status.value] += 1
+
+    return {
+        "success": True,
+        "year": year,
+        "months": months_data,
+        "totals": {
+            "paidHt": round(total_paid_ht, 2),
+            "paidTva": round(total_paid_tva, 2),
+            "paidTtc": round(total_paid_ht + total_paid_tva, 2),
+            "pendingHt": round(total_pending_ht, 2),
+            "quotesSent": total_quotes_sent,
+            "quotesAccepted": total_quotes_accepted,
+            "conversionRate": round(total_quotes_accepted / total_quotes_sent * 100, 1) if total_quotes_sent > 0 else 0,
+        },
+        "statusBreakdown": dict(status_breakdown),
     }

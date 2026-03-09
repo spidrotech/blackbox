@@ -160,6 +160,13 @@ export default function InvoiceDetailPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [creatingCreditNote, setCreatingCreditNote] = useState(false);
+  const [releasingRetention, setReleasingRetention] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  const showToast = (msg: string, ok = true) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   const loadInvoice = useCallback(async () => {
     try {
@@ -231,9 +238,26 @@ export default function InvoiceDetailPage() {
         router.push(buildDetailPath('invoices', res.data.id));
       }
     } catch {
-      alert('Erreur lors de la création de l\'avoir');
+      showToast('Erreur lors de la création de l\'avoir', false);
     } finally {
       setCreatingCreditNote(false);
+    }
+  };
+
+  const handleReleaseRetention = async () => {
+    if (!confirm('Créer la facture de libération de retenue de garantie ?')) return;
+    setReleasingRetention(true);
+    try {
+      const res = await invoiceService.releaseRetention(invoiceId);
+      if (res.success && res.data) {
+        showToast('Facture de libération créée !');
+        router.push(buildDetailPath('invoices', res.data.id));
+      }
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Erreur';
+      showToast(msg, false);
+    } finally {
+      setReleasingRetention(false);
     }
   };
 
@@ -291,6 +315,27 @@ export default function InvoiceDetailPage() {
   const isOverdue =
     status === 'sent' && dueDate && new Date(dueDate) < new Date();
 
+  const invoiceType = invoice.invoiceType ?? (invoice as unknown as { invoice_type?: string }).invoice_type ?? 'invoice';
+  const retentionPercent = invoice.retentionPercent ?? (invoice as unknown as { retention_percent?: number }).retention_percent;
+  const retentionReleased = invoice.retentionReleased ?? (invoice as unknown as { retention_released?: boolean }).retention_released ?? false;
+  const retentionAmount = invoice.retentionAmount ?? (retentionPercent ? totalHt * retentionPercent / 100 : 0);
+  const situationNumber = invoice.situationNumber ?? (invoice as unknown as { situation_number?: number }).situation_number;
+  const situationPercent = invoice.situationPercent ?? (invoice as unknown as { situation_percent?: number }).situation_percent;
+  const cumulativePercent = invoice.cumulativePercent ?? (invoice as unknown as { cumulative_percent?: number }).cumulative_percent;
+  const depositPercent = invoice.depositPercent ?? (invoice as unknown as { deposit_percent?: number }).deposit_percent;
+  const originalInvoiceId = invoice.originalInvoiceId ?? (invoice as unknown as { original_invoice_id?: number }).original_invoice_id;
+  const facturxStatus = invoice.facturxStatus ?? (invoice as unknown as { facturx_status?: string }).facturx_status;
+
+  const TYPE_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
+    invoice:           { label: 'Facture',                   color: 'bg-blue-50 border-blue-200 text-blue-800',    icon: '📄' },
+    deposit:           { label: `Acompte ${depositPercent ?? ''}%`, color: 'bg-violet-50 border-violet-200 text-violet-800', icon: '✅' },
+    situation:         { label: `Situation n°${situationNumber ?? ''} (${situationPercent ?? ''}%)`, color: 'bg-cyan-50 border-cyan-200 text-cyan-800', icon: '📊' },
+    credit_note:       { label: 'Avoir (Note de crédit)',     color: 'bg-orange-50 border-orange-200 text-orange-800', icon: '↩️' },
+    retention_release: { label: 'Libération retenue de garantie', color: 'bg-teal-50 border-teal-200 text-teal-800', icon: '🔓' },
+  };
+
+  const typeConfig = TYPE_CONFIG[invoiceType] ?? TYPE_CONFIG.invoice;
+
   return (
     <MainLayout>
       {showPaymentModal && (
@@ -301,7 +346,59 @@ export default function InvoiceDetailPage() {
         />
       )}
 
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg text-white text-sm font-medium
+          ${ toast.ok ? 'bg-emerald-600' : 'bg-red-600'}`}>
+          {toast.msg}
+        </div>
+      )}
+
       <div className="max-w-5xl mx-auto space-y-6">
+
+        {/* ── Type Banner (BTP) ───────────────────────────────── */}
+        {invoiceType !== 'invoice' && (
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-semibold ${typeConfig.color}`}>
+            <span className="text-lg">{typeConfig.icon}</span>
+            <span>{typeConfig.label}</span>
+            {invoiceType === 'situation' && cumulativePercent && (
+              <span className="ml-auto text-xs font-medium opacity-70">Cumul facturé : {cumulativePercent}%</span>
+            )}
+            {invoiceType === 'credit_note' && originalInvoiceId && (
+              <Link href={buildDetailPath('invoices', originalInvoiceId)} className="ml-auto text-xs underline opacity-80">
+                Voir facture originale
+              </Link>
+            )}
+            {invoiceType === 'retention_release' && originalInvoiceId && (
+              <Link href={buildDetailPath('invoices', originalInvoiceId)} className="ml-auto text-xs underline opacity-80">
+                Voir facture associée
+              </Link>
+            )}
+          </div>
+        )}
+
+        {/* Factur-X status banner */}
+        {facturxStatus && (
+          <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border text-sm
+            ${ facturxStatus === 'generated' || facturxStatus === 'sent'
+                ? 'bg-green-50 border-green-200 text-green-800'
+                : 'bg-yellow-50 border-yellow-200 text-yellow-800'}`}>
+            <span>🇫🇷</span>
+            <span>
+              {facturxStatus === 'generated' ? 'Factur-X généré — conformément à la loi anti-fraude 2026'
+               : facturxStatus === 'sent' ? 'Factur-X envoyé'
+               : 'Factur-X en attente de génération'}
+            </span>
+            <div className="ml-auto flex gap-2">
+              <button onClick={handleDownloadFacturX} className="text-xs px-2.5 py-1 bg-white border rounded-lg hover:bg-gray-50 transition-colors">
+                Télécharger PDF
+              </button>
+              <button onClick={handleDownloadFacturXml} className="text-xs px-2.5 py-1 bg-white border rounded-lg hover:bg-gray-50 transition-colors">
+                Télécharger XML
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── Header ────────────────────────────────────── */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -354,18 +451,22 @@ export default function InvoiceDetailPage() {
             </Button>
             {/* Factur-X e-invoicing */}
             <Button onClick={handleDownloadFacturX} variant="outline">
-              🇫🇷 Factur-X PDF
-            </Button>
-            <Button onClick={handleDownloadFacturXml} variant="outline">
-              📋 XML CII
+              🇫🇷 Factur-X
             </Button>
             {/* Duplicate & Credit Note */}
             <Button onClick={handleDuplicate} loading={duplicating} variant="outline">
               📑 Dupliquer
             </Button>
-            {(status === 'paid' || status === 'sent' || status === 'partial') && (
+            {(status === 'paid' || status === 'sent' || status === 'partial') &&
+             invoiceType !== 'credit_note' && invoiceType !== 'retention_release' && (
               <Button onClick={handleCreditNote} loading={creatingCreditNote} variant="outline">
                 ↩️ Avoir
+              </Button>
+            )}
+            {/* Libération retenue de garantie */}
+            {retentionPercent && retentionPercent > 0 && !retentionReleased && (
+              <Button onClick={handleReleaseRetention} loading={releasingRetention} variant="outline">
+                🔓 Libérer retenue
               </Button>
             )}
             <Button variant="outline" onClick={() => router.push(buildEditPath('invoices', invoiceId))}>
@@ -460,6 +561,76 @@ export default function InvoiceDetailPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* ── BTP Info Card (Retenue, Situation, Acompte) ──────── */}
+        {(retentionPercent || situationNumber || depositPercent) && (
+          <Card className="border-l-4 border-l-amber-400 bg-amber-50/30">
+            <CardHeader>
+              <CardTitle className="text-sm">Informations BTP</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                {depositPercent && (
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Acompte</p>
+                    <p className="font-bold text-violet-700">{depositPercent}%</p>
+                  </div>
+                )}
+                {situationNumber && (
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Situation</p>
+                    <p className="font-bold text-cyan-700">N°{situationNumber} — {situationPercent}%</p>
+                  </div>
+                )}
+                {cumulativePercent && (
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Cumul facturé</p>
+                    <div className="space-y-1">
+                      <p className="font-bold text-gray-800">{cumulativePercent}%</p>
+                      <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-cyan-500 rounded-full"
+                          style={{ width: `${Math.min(Number(cumulativePercent), 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {retentionPercent && (
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Retenue de garantie</p>
+                    <p className="font-bold text-amber-700">
+                      {retentionPercent}% = {fmt(retentionAmount)}
+                    </p>
+                    {retentionReleased ? (
+                      <span className="text-xs text-emerald-600 font-semibold">✓ Libérée</span>
+                    ) : (
+                      <span className="text-xs text-amber-600">⏳ En attente de libération</span>
+                    )}
+                  </div>
+                )}
+              </div>
+              {/* Montant net après retenue */}
+              {retentionPercent && !retentionReleased && (
+                <div className="mt-4 pt-3 border-t border-amber-100 flex items-center justify-between">
+                  <div className="text-sm">
+                    <p className="text-gray-500 text-xs">Montant payable (après retenue {retentionPercent}%)</p>
+                    <p className="font-bold text-lg text-gray-900">{fmt(totalTtc - (totalTtc * retentionPercent / 100))}</p>
+                  </div>
+                  {!retentionReleased && status !== 'draft' && (
+                    <Button
+                      variant="outline"
+                      onClick={handleReleaseRetention}
+                      loading={releasingRetention}
+                    >
+                      🔓 Créer facture de libération
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* ── Line items ────────────────────────────────── */}
         <Card>

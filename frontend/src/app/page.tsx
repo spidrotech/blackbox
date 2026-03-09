@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { MarketingFooter } from '@/components/marketing/MarketingFooter';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('home');
@@ -15,7 +16,7 @@ export default function Home() {
   const tabs = [
     { id: 'home', label: 'Accueil', href: '#home' },
     { id: 'features', label: 'Fonctionnalités', href: '#features' },
-    { id: 'pricing', label: 'Tarifs', href: '#pricing' },
+    { id: 'pricing', label: 'Tarifs', href: '/pricing' },
     { id: 'contact', label: 'Contact', href: '/contact' },
   ];
 
@@ -73,7 +74,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-gray-900">GESTAR</h1>
+              <Link href="/" className="text-2xl font-bold text-gray-900 hover:text-blue-600 transition-colors">GESTAR</Link>
             </div>
             <div className="hidden md:flex items-center space-x-8">
               {tabs.map((tab) => (
@@ -193,7 +194,7 @@ export default function Home() {
               Tarifs adaptés à vos besoins
             </h2>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Choisissez le plan qui correspond à votre entreprise.
+              Decouvrez un apercu des plans puis consultez la page dediee pour le detail complet.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -222,43 +223,28 @@ export default function Home() {
                   ))}
                 </ul>
                 <Link
-                  href="/register"
+                  href="/pricing"
                   className={`w-full py-3 px-6 rounded-lg text-center font-medium transition-colors ${
                     plan.popular
                       ? 'bg-blue-600 hover:bg-blue-700 text-white'
                       : 'bg-gray-100 hover:bg-gray-200 text-gray-900'
                   }`}
                 >
-                  Commencer
+                  Voir le detail
                 </Link>
               </div>
             ))}
           </div>
+          <div className="text-center mt-10">
+            <Link href="/pricing" className="inline-flex items-center gap-2 text-blue-600 font-medium hover:text-blue-700">
+              Consulter la page tarifs
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+            </Link>
+          </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h3 className="text-2xl font-bold mb-4">GESTAR</h3>
-            <p className="text-gray-400 mb-8">
-              La solution SaaS pour la gestion de projets moderne.
-            </p>
-            <div className="flex justify-center space-x-6">
-              <Link href="/login" className="text-gray-400 hover:text-white transition-colors">
-                Se connecter
-              </Link>
-              <Link href="/register" className="text-gray-400 hover:text-white transition-colors">
-                S&apos;inscrire
-              </Link>
-              <Link href="/contact" className="text-gray-400 hover:text-white transition-colors">
-                Contact
-              </Link>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }

@@ -65,6 +65,11 @@ class Quote(SQLModel, table=True):
     payment_terms: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     conditions: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     
+    # Avenants (devis modificatifs)
+    parent_quote_id: Optional[int] = Field(default=None, foreign_key="quotes.id")
+    avenant_number: Optional[int] = Field(default=None)  # 1 = premier avenant, 2 = deuxième...
+    quote_type: str = Field(default="quote", max_length=20)  # quote, avenant
+    
     created_by_id: Optional[int] = Field(default=None, foreign_key="users.id")
     
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -142,6 +147,9 @@ class QuoteRead(SQLModel):
     deposit_percent: Optional[Decimal]
     deposit_amount: Optional[Decimal]
     notes: Optional[str]
+    parent_quote_id: Optional[int] = None
+    avenant_number: Optional[int] = None
+    quote_type: str = "quote"
     total_ht: Optional[Decimal] = None
     total_tva: Optional[Decimal] = None
     total_ttc: Optional[Decimal] = None
@@ -176,4 +184,11 @@ class QuoteUpdate(SQLModel):
     bank_details: Optional[str] = None
     legal_mentions: Optional[str] = None
     payment_methods: Optional[str] = None
+    line_items: Optional[List[dict]] = None
+
+
+class AvenantCreate(SQLModel):
+    description: Optional[str] = None
+    expiry_date: Optional[date] = None
+    notes: Optional[str] = None
     line_items: Optional[List[dict]] = None

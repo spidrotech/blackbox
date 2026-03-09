@@ -251,6 +251,13 @@ export interface Quote {
   created_at?: string;
   createdAt?: string;
   updated_at?: string;
+  // Avenants (devis modificatifs)
+  parent_quote_id?: number;
+  parentQuoteId?: number;
+  avenant_number?: number;
+  avenantNumber?: number;
+  quote_type?: string;    // 'quote' | 'avenant'
+  quoteType?: string;
 }
 
 export interface QuoteCreate {
@@ -320,6 +327,25 @@ export interface Invoice {
   original_invoice_id?: number;
   facturx_status?: string;
   siren_buyer?: string;
+  // Acompte
+  deposit_percent?: number;
+  depositPercent?: number;
+  // Situation de travaux
+  situation_number?: number;
+  situationNumber?: number;
+  situation_percent?: number;
+  situationPercent?: number;
+  cumulative_percent?: number;
+  cumulativePercent?: number;
+  // Retenue de garantie
+  retention_percent?: number;
+  retentionPercent?: number;
+  retention_released?: boolean;
+  retentionReleased?: boolean;
+  retention_release_invoice_id?: number;
+  retentionReleaseInvoiceId?: number;
+  retention_amount?: number;
+  retentionAmount?: number;
   customer_id?: number;
   customer?: Customer;
   project_id?: number;
@@ -349,6 +375,15 @@ export interface Invoice {
   originalInvoiceId?: number;
   facturxStatus?: string;
   sirenBuyer?: string;
+  // Relances
+  reminder_count?: number;
+  reminderCount?: number;
+  last_reminder_at?: string;
+  lastReminderAt?: string;
+  isOverdue?: boolean;
+  daysOverdue?: number;
+  // Acompte / Situation / Retenue (camelCase from backend)
+  retentionReleaseInvoiceId?: number;
   customerId?: number;
   projectId?: number;
   quoteId?: number;
@@ -650,4 +685,51 @@ export interface ApiResponse<T> {
   error?: string;
   message?: string;
   total?: number;
+}
+
+export interface SituationsSummary {
+  quoteTotalHt: number;
+  billedTotal: number;
+  billedPercent: number;
+  remainingPercent: number;
+  remainingHt: number;
+  depositInvoice: Invoice | null;
+  situations: Invoice[];
+  retentionInvoices: Invoice[];
+}
+
+export interface OverdueStats {
+  total: number;
+  overdue_count: number;
+  pending_count: number;
+  total_overdue_amount: number;
+  total_pending_amount: number;
+  total_amount: number;
+}
+
+export interface FinancialReportMonth {
+  month: number;
+  label: string;
+  paidHt: number;
+  paidTva: number;
+  paidTtc: number;
+  pendingHt: number;
+  quotesSent: number;
+  quotesAccepted: number;
+  conversionRate: number;
+}
+
+export interface FinancialReport {
+  year: number;
+  months: FinancialReportMonth[];
+  totals: {
+    paidHt: number;
+    paidTva: number;
+    paidTtc: number;
+    pendingHt: number;
+    quotesSent: number;
+    quotesAccepted: number;
+    conversionRate: number;
+  };
+  statusBreakdown: Record<string, number>;
 }

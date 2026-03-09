@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { MarketingFooter } from '@/components/marketing/MarketingFooter';
 
 export default function Contact() {
   const [formData, setFormData] = useState({
@@ -56,7 +57,7 @@ export default function Contact() {
               <Link href="/#features" className="text-gray-700 hover:text-blue-600 font-medium">
                 Fonctionnalités
               </Link>
-              <Link href="/#pricing" className="text-gray-700 hover:text-blue-600 font-medium">
+              <Link href="/pricing" className="text-gray-700 hover:text-blue-600 font-medium">
                 Tarifs
               </Link>
               <Link href="/contact" className="text-blue-600 font-medium border-b-2 border-blue-600">
@@ -220,28 +221,7 @@ export default function Contact() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12 mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h3 className="text-2xl font-bold mb-4">GESTAR</h3>
-            <p className="text-gray-400 mb-8">
-              La solution SaaS pour la gestion de projets moderne.
-            </p>
-            <div className="flex justify-center space-x-6">
-              <Link href="/login" className="text-gray-400 hover:text-white transition-colors">
-                Se connecter
-              </Link>
-              <Link href="/register" className="text-gray-400 hover:text-white transition-colors">
-                S&apos;inscrire
-              </Link>
-              <Link href="/contact" className="text-gray-400 hover:text-white transition-colors">
-                Contact
-              </Link>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }

@@ -43,7 +43,7 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex flex-col h-full px-12 py-10">
           {/* Logo */}
-          <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3 w-fit">
             <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -51,7 +51,7 @@ export default function LoginPage() {
               </svg>
             </div>
             <span className="text-2xl font-bold text-white tracking-tight">Gestar</span>
-          </div>
+          </Link>
 
           {/* Main pitch */}
           <div className="mt-auto mb-auto pt-16">
@@ -81,14 +81,14 @@ export default function LoginPage() {
           </div>
 
           {/* Footer */}
-          <p className="text-blue-400/60 text-xs">&copy; 2026 Gestar. Tous droits réservés.</p>
+          <p className="text-blue-400/60 text-xs">&copy; {new Date().getFullYear()} Gestar. Tous droits réservés.</p>
         </div>
       </div>
 
       {/* Right panel — form */}
       <div className="flex-1 flex flex-col justify-center items-center px-8 py-12 bg-white">
         {/* Mobile logo */}
-        <div className="lg:hidden flex items-center gap-2 mb-8">
+        <Link href="/" className="lg:hidden flex items-center gap-2 mb-8">
           <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center">
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -96,7 +96,7 @@ export default function LoginPage() {
             </svg>
           </div>
           <span className="text-xl font-bold text-gray-900">Gestar</span>
-        </div>
+        </Link>
 
         <div className="w-full max-w-sm">
           <h2 className="text-2xl font-bold text-gray-900 mb-1">Connexion</h2>
@@ -136,7 +136,7 @@ export default function LoginPage() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-sm font-medium text-gray-700">Mot de passe</label>
-                <a href="#" className="text-xs text-blue-600 hover:underline">Mot de passe oublié ?</a>
+                <a href="/forgot-password" className="text-xs text-blue-600 hover:underline">Mot de passe oublié ?</a>
               </div>
               <div className="relative">
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
@@ -186,6 +186,10 @@ export default function LoginPage() {
           </form>
 
           <p className="text-center text-sm text-gray-400 mt-8">
+            <Link href="/" className="text-gray-500 hover:text-blue-600 hover:underline mr-2">
+              Retour a l&apos;accueil
+            </Link>
+            <span className="text-gray-300">•</span>{' '}
             Pas encore de compte ?{' '}
             <Link href="/register" className="text-blue-600 font-medium hover:underline">
               S&apos;inscrire gratuitement

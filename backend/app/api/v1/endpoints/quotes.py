@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query  # type: ignore
+from fastapi import APIRouter, Body, Depends, HTTPException, Query  # type: ignore
 from fastapi.responses import FileResponse  # type: ignore
 from sqlmodel import Session, select, col  # type: ignore
 from sqlalchemy import desc  # type: ignore
@@ -235,6 +235,10 @@ def get_quote_response(quote: Quote, session: Session) -> dict:
         "created_at": quote.created_at.isoformat(),
         "customer": customer,
         "line_items": items,
+        # Avenants
+        "parent_quote_id": quote.parent_quote_id,
+        "avenant_number": quote.avenant_number,
+        "quote_type": getattr(quote, "quote_type", "quote") or "quote",
     }
 
 
@@ -1105,3 +1109,151 @@ def duplicate_quote(
     session.commit()
 
     return {"success": True, "quote": get_quote_response(new_quote, session)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AVENANTS — Devis modificatifs
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@router.post("/{quote_id}/avenant", response_model=dict)
+def create_avenant(
+    quote_id: int,
+    body: dict = Body(default={}),
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session),
+):
+    """
+    Crée un avenant à un devis existant.
+
+    L'avenant est un nouveau devis lié au devis parent via `parent_quote_id`.
+    Il hérite du client, du chantier et des paramètres du devis original.
+    Les lignes peuvent être fournies ou laissées vides.
+
+    Body: { description?: str, notes?: str, expiry_date?: str, line_items?: list }
+    """
+    original = session.get(Quote, quote_id)
+    if not original or original.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Devis non trouvé")
+
+    # Numéro d'avenant : compter les avenants existants
+    existing_avenants = session.exec(
+        select(Quote).where(Quote.parent_quote_id == quote_id)
+    ).all()
+    avenant_number = len(existing_avenants) + 1
+
+    # Référence : DEV parent + suffixe AVn
+    avenant_reference = f"{original.reference}-AV{avenant_number}"
+    # Vérifier l'unicité
+    if session.exec(select(Quote).where(Quote.reference == avenant_reference)).first():
+        avenant_reference = f"{original.reference}-AV{avenant_number}-{datetime.now().strftime('%H%M%S')}"
+
+    expiry_date_str = body.get("expiry_date")
+    expiry_date = (
+        date.fromisoformat(expiry_date_str)
+        if expiry_date_str
+        else date.today() + timedelta(days=30)
+    )
+
+    avenant = Quote(
+        company_id=current_user.company_id,
+        customer_id=original.customer_id,
+        project_id=original.project_id,
+        reference=avenant_reference,
+        status=QuoteStatus.DRAFT,
+        description=body.get("description") or f"Avenant n°{avenant_number} — {original.description or original.reference}",
+        quote_date=date.today(),
+        expiry_date=expiry_date,
+        work_start_date=original.work_start_date,
+        worksite_address=original.worksite_address,
+        notes=body.get("notes") or original.notes,
+        payment_terms=original.payment_terms,
+        conditions=original.conditions,
+        bank_details=original.bank_details,
+        legal_mentions=original.legal_mentions,
+        footer_notes=original.footer_notes,
+        parent_quote_id=quote_id,
+        avenant_number=avenant_number,
+        quote_type="avenant",
+        created_by_id=current_user.id,
+    )
+    session.add(avenant)
+    session.commit()
+    session.refresh(avenant)
+
+    # Copier les lignes du devis parent si aucune ligne fourn ie
+    provided_items = body.get("line_items")
+    if provided_items:
+        for i, item_data in enumerate(provided_items):
+            raw_type = item_data.get("item_type") or "supply"
+            try:
+                resolved_type = LineItemType(raw_type)
+            except ValueError:
+                resolved_type = LineItemType.SUPPLY
+            line = LineItem(
+                quote_id=avenant.id,
+                description=item_data.get("designation") or item_data.get("description") or "",
+                long_description=item_data.get("long_description"),
+                item_type=resolved_type,
+                quantity=Decimal(str(item_data.get("quantity") or 1)),
+                unit=item_data.get("unit", "u"),
+                unit_price=Decimal(str(item_data.get("unit_price") or 0)),
+                tax_rate=Decimal(str(item_data.get("vat_rate") or 20)),
+                reference=item_data.get("reference"),
+                display_order=i,
+            )
+            session.add(line)
+    else:
+        # Copier les lignes du parent
+        original_items = session.exec(
+            select(LineItem).where(LineItem.quote_id == original.id).order_by(LineItem.display_order)
+        ).all()
+        for item in original_items:
+            new_item = LineItem(
+                quote_id=avenant.id,
+                description=item.description,
+                long_description=item.long_description,
+                item_type=item.item_type,
+                quantity=item.quantity,
+                unit=item.unit,
+                unit_price=item.unit_price,
+                discount=item.discount,
+                discount_percent=item.discount_percent,
+                tax_rate=item.tax_rate,
+                reference=item.reference,
+                brand=item.brand,
+                section=item.section,
+                display_order=item.display_order,
+            )
+            session.add(new_item)
+
+    session.commit()
+
+    return {
+        "success": True,
+        "quote": get_quote_response(avenant, session),
+        "avenant_number": avenant_number,
+    }
+
+
+@router.get("/{quote_id}/avenants", response_model=dict)
+def list_avenants(
+    quote_id: int,
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session),
+):
+    """Liste les avenants d'un devis"""
+    original = session.get(Quote, quote_id)
+    if not original or original.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Devis non trouvé")
+
+    avenants = session.exec(
+        select(Quote)
+        .where(Quote.parent_quote_id == quote_id)
+        .order_by(Quote.avenant_number)
+    ).all()
+
+    return {
+        "success": True,
+        "avenants": [get_quote_response(a, session) for a in avenants],
+    }

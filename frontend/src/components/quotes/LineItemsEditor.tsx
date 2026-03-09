@@ -1,6 +1,8 @@
-﻿'use client';
+'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { priceLibraryService } from '@/services/api';
+import { PriceLibraryItem } from '@/types';
 
 export type ItemType =
   | 'supply' | 'labor' | 'work' | 'subcontracting' | 'equipment' | 'misc' | 'other'
@@ -36,7 +38,11 @@ const ITEM_TYPES: { value: ItemType; label: string; group?: string }[] = [
 const PRICE_TYPES = ITEM_TYPES.filter(t => !t.group);
 const STRUCT_TYPES = ITEM_TYPES.filter(t => t.group);
 
-const UNIT_OPTIONS = ['u', 'h', 'jour', 'm', 'm\u00b2', 'm\u00b3', 'kg', 'forfait', 'ml'];
+const UNIT_OPTIONS = [
+  'u', 'h', 'm', 'm\u00b2', 'm\u00b3', 'ml', 'l', 'g', 'kg', 't',
+  'mm', 'cm', 'cm\u00b2', 'cm\u00b3', 'km', 'km\u00b2',
+  'min', 'mg', 'lb', 'fft', 'ens', 'jour', 'ha', 'pce', 'mois', 'paire', 'sem', 'forfait',
+];
 const VAT_OPTIONS = [20, 10, 5.5, 2.1, 0];
 
 const TYPE_STYLE: Record<ItemType, { bg: string; text: string; ring: string; dot: string }> = {
@@ -488,6 +494,58 @@ function newItem(type: ItemType = 'supply'): LineItemData {
 
 export function LineItemsEditor({ items, onChange, priceLibrary = [] }: LineItemsEditorProps) {
   const [showLibrary, setShowLibrary] = useState(false);
+  const [libQuery, setLibQuery] = useState('');
+  const [libResults, setLibResults] = useState<PriceLibraryItem[]>([]);
+  const [libLoading, setLibLoading] = useState(false);
+  const libDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!showLibrary) return;
+    if (libQuery.trim() || libResults.length > 0) return;
+    setLibLoading(true);
+    priceLibraryService.getMostUsed(20)
+      .then(res => { if (res.success) setLibResults(Array.isArray(res.data) ? (res.data as unknown as PriceLibraryItem[]) : []); })
+      .catch(() => {})
+      .finally(() => setLibLoading(false));
+  }, [showLibrary]);
+
+  const searchLib = (q: string) => {
+    setLibQuery(q);
+    if (libDebounceRef.current) clearTimeout(libDebounceRef.current);
+    if (!q.trim()) {
+      setLibLoading(true);
+      priceLibraryService.getMostUsed(20)
+        .then(res => { if (res.success) setLibResults(Array.isArray(res.data) ? (res.data as unknown as PriceLibraryItem[]) : []); })
+        .catch(() => {})
+        .finally(() => setLibLoading(false));
+      return;
+    }
+    libDebounceRef.current = setTimeout(() => {
+      setLibLoading(true);
+      priceLibraryService.search(q)
+        .then(res => { if (res.success) setLibResults(Array.isArray(res.data) ? (res.data as unknown as PriceLibraryItem[]) : []); })
+        .catch(() => {})
+        .finally(() => setLibLoading(false));
+    }, 300);
+  };
+
+  const closeLibrary = () => { setShowLibrary(false); setLibQuery(''); setLibResults([]); };
+
+  const addFromPriceLib = (pl: PriceLibraryItem) => {
+    const VALID_ITEM_TYPES: ItemType[] = ['supply', 'labor', 'work', 'subcontracting', 'equipment', 'misc', 'other'];
+    const itemType: ItemType = VALID_ITEM_TYPES.includes(pl.item_type as ItemType) ? (pl.item_type as ItemType) : 'supply';
+    onChange([...items, {
+      description: pl.name,
+      long_description: pl.long_description || undefined,
+      item_type: itemType,
+      quantity: 1,
+      unit: pl.unit || 'u',
+      unit_price: pl.unit_price,
+      vat_rate: pl.tax_rate ?? 20,
+      reference: pl.reference,
+    }]);
+    closeLibrary();
+  };
 
   const update = (index: number, updates: Partial<LineItemData>) => {
     const next = [...items];
@@ -525,11 +583,6 @@ export function LineItemsEditor({ items, onChange, priceLibrary = [] }: LineItem
   };
 
   const addNew = (type: ItemType = 'supply') => onChange([...items, newItem(type)]);
-
-  const addFromLibrary = (lib: LineItemData) => {
-    onChange([...items, { ...lib, id: undefined }]);
-    setShowLibrary(false);
-  };
 
   const totalHT = items.reduce((sum, it) => {
     if (['section', 'text', 'page_break'].includes(it.item_type)) return sum;
@@ -590,36 +643,67 @@ export function LineItemsEditor({ items, onChange, priceLibrary = [] }: LineItem
           Section
         </button>
         <MoreTypesButton onAdd={addNew} />
-        {priceLibrary.length > 0 && (
-          <button type="button" onClick={() => setShowLibrary(v => !v)}
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 px-3.5 py-2 rounded-xl transition-all border border-purple-100 shadow-sm hover:shadow">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
-            Biblioth\u00e8que prix
-          </button>
-        )}
+        <button type="button" onClick={() => showLibrary ? closeLibrary() : setShowLibrary(true)}
+          className={`inline-flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-xl transition-all border shadow-sm hover:shadow ${showLibrary ? 'text-purple-800 bg-purple-100 border-purple-200' : 'text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 border-purple-100'}`}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
+          Biblioth\u00e8que
+        </button>
       </div>
 
-      {showLibrary && priceLibrary.length > 0 && (
-        <div className="mt-2 p-4 bg-purple-50/60 rounded-2xl border border-purple-100">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-bold text-purple-700 uppercase tracking-wider">S\u00e9lectionner depuis la biblioth\u00e8que</p>
-            <button type="button" onClick={() => setShowLibrary(false)} className="text-purple-400 hover:text-purple-600 transition-colors">
+      {showLibrary && (
+        <div className="mt-2 bg-white rounded-2xl border border-purple-200 shadow-lg overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-3 bg-purple-50/70 border-b border-purple-100">
+            <svg className="w-4 h-4 text-purple-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            <input
+              type="text"
+              value={libQuery}
+              onChange={e => searchLib(e.target.value)}
+              placeholder="Rechercher dans la biblioth\u00e8que des prix..."
+              className="flex-1 text-sm bg-transparent border-0 outline-none placeholder:text-purple-300 text-gray-700"
+              autoFocus
+            />
+            {libLoading && (
+              <svg className="w-4 h-4 text-purple-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+              </svg>
+            )}
+            <button type="button" onClick={closeLibrary} className="text-purple-300 hover:text-purple-600 transition-colors flex-shrink-0">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {priceLibrary.map((lib, i) => (
-              <button key={i} type="button" onClick={() => addFromLibrary(lib)}
-                className="flex items-center gap-3 text-left bg-white border border-purple-200 text-purple-800 px-3 py-2.5 rounded-xl hover:bg-purple-50 hover:shadow-sm transition-all">
-                <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold truncate">{lib.description}</p>
-                  <p className="text-xs text-purple-500">{lib.unit_price?.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} / {lib.unit || 'u'}</p>
-                </div>
-              </button>
-            ))}
+          <div className="max-h-72 overflow-y-auto p-3">
+            {!libLoading && libResults.length === 0 && libQuery.trim() && (
+              <p className="text-sm text-gray-400 text-center py-6">Aucun r\u00e9sultat pour &laquo;&nbsp;{libQuery}&nbsp;&raquo;</p>
+            )}
+            {!libLoading && libResults.length === 0 && !libQuery.trim() && (
+              <p className="text-sm text-gray-400 text-center py-6">Tapez pour rechercher dans votre biblioth\u00e8que des prix</p>
+            )}
+            {libResults.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {libResults.map(pl => {
+                  const typeColor: Record<string, string> = { supply: 'bg-blue-100 text-blue-600', labor: 'bg-orange-100 text-orange-600', work: 'bg-violet-100 text-violet-600' };
+                  const tc = typeColor[pl.item_type as string] || 'bg-gray-100 text-gray-500';
+                  return (
+                    <button key={pl.id} type="button" onClick={() => addFromPriceLib(pl)}
+                      className="flex items-start gap-3 text-left bg-gray-50/80 border border-gray-200 hover:border-purple-300 hover:bg-purple-50/40 px-3 py-2.5 rounded-xl transition-all">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 text-xs font-bold ${tc}`}>
+                        {(pl.item_type as string) === 'labor' ? 'MO' : (pl.item_type as string) === 'work' ? 'Ouv' : 'F'}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{pl.name}</p>
+                        {pl.description && pl.description !== pl.name && (
+                          <p className="text-xs text-gray-400 truncate">{pl.description}</p>
+                        )}
+                        <p className="text-xs font-semibold text-purple-600 mt-0.5">
+                          {pl.unit_price.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })} / {pl.unit || 'u'}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

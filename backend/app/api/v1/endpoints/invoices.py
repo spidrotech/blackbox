@@ -8,7 +8,7 @@ from decimal import Decimal
 from app.db.session import get_session
 from app.models import (
     Invoice, InvoiceCreate, InvoiceUpdate, PaymentCreate,
-    LineItem, Customer, Project, Company, User
+    LineItem, Customer, Project, Company, User, Quote
 )
 from app.models.enums import InvoiceStatus, LineItemType
 from app.core.security import get_current_user_required
@@ -160,6 +160,22 @@ def get_invoice_response(invoice: Invoice, session: Session) -> dict:
         "purchaseOrder": invoice.purchase_order,
         "conditions": invoice.conditions,
         "invoiceType": invoice.invoice_type,
+        # Acompte
+        "depositPercent": float(invoice.deposit_percent) if invoice.deposit_percent else None,
+        # Situation de travaux
+        "situationNumber": invoice.situation_number,
+        "situationPercent": float(invoice.situation_percent) if invoice.situation_percent else None,
+        "cumulativePercent": float(invoice.cumulative_percent) if invoice.cumulative_percent else None,
+        # Retenue de garantie
+        "retentionPercent": float(invoice.retention_percent) if invoice.retention_percent else None,
+        "retentionReleased": invoice.retention_released or False,
+        "retentionReleaseInvoiceId": invoice.retention_release_invoice_id,
+        "retentionAmount": float(total_ht * (invoice.retention_percent or Decimal(0)) / 100) if invoice.retention_percent else None,
+        # Avoir
+        "originalInvoiceId": invoice.original_invoice_id,
+        # Factur-X
+        "facturxStatus": invoice.facturx_status,
+        "sirenBuyer": invoice.siren_buyer,
         "totalHt": float(total_ht),
         "totalTva": float(total_tva),
         "totalTtc": float(total_ttc),
@@ -176,6 +192,7 @@ def get_invoice_response(invoice: Invoice, session: Session) -> dict:
 @router.get("/", response_model=dict)
 def list_invoices(
     status: Optional[str] = None,
+    invoice_type: Optional[str] = None,
     customer_id: Optional[int] = None,
     search: Optional[str] = None,
     skip: int = Query(0, ge=0),
@@ -188,6 +205,9 @@ def list_invoices(
     
     if status:
         statement = statement.where(Invoice.status == status)
+    
+    if invoice_type:
+        statement = statement.where(Invoice.invoice_type == invoice_type)
     
     if customer_id:
         statement = statement.where(Invoice.customer_id == customer_id)
@@ -640,7 +660,484 @@ def create_credit_note(
     return {"success": True, "invoice": get_invoice_response(credit_note, session)}
 
 
-@router.get("/{invoice_id}/pdf")
+# ═══════════════════════════════════════════════════════════════════════════════
+# BTP FEATURES — Acomptes, Situations, Retenue de garantie
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@router.get("/from-quote/{quote_id}/situations-summary", response_model=dict)
+def get_situations_summary(
+    quote_id: int,
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session),
+):
+    """
+    Retourne un récapitulatif de facturation pour un devis :
+    - total du devis HT/TTC
+    - % déjà facturé (acomptes + situations)
+    - montant déjà facturé
+    - liste des factures liées (acomptes + situations + retenue)
+    """
+    quote = session.get(Quote, quote_id)
+    if not quote or quote.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Devis non trouvé")
+
+    # Toutes les factures liées à ce devis
+    linked = session.exec(
+        select(Invoice).where(Invoice.quote_id == quote_id)
+    ).all()
+
+    # Totaux devis
+    quote_line_items = session.exec(
+        select(LineItem).where(LineItem.quote_id == quote_id)
+    ).all()
+    quote_total_ht = sum(
+        (i.quantity * i.unit_price * (1 - (i.discount_percent or Decimal(0)) / 100))
+        for i in quote_line_items
+    )
+
+    billed_total = Decimal(0)
+    billed_percent = Decimal(0)
+    deposit_invoice = None
+    situations = []
+    retention_invoices = []
+
+    for inv in linked:
+        inv_data = get_invoice_response(inv, session)
+        if inv.invoice_type == "deposit":
+            billed_total += Decimal(str(inv_data["totalHt"]))
+            deposit_invoice = inv_data
+        elif inv.invoice_type == "situation":
+            billed_total += Decimal(str(inv_data["totalHt"]))
+            if inv.situation_percent:
+                billed_percent += inv.situation_percent
+            situations.append(inv_data)
+        elif inv.invoice_type == "retention_release":
+            retention_invoices.append(inv_data)
+
+    # Percent from deposit
+    if deposit_invoice and quote_total_ht > 0:
+        dp = Decimal(str(deposit_invoice.get("depositPercent") or 0))
+        billed_percent += dp
+
+    remaining_percent = max(Decimal(0), Decimal(100) - billed_percent)
+    remaining_ht = max(Decimal(0), quote_total_ht - billed_total)
+
+    return {
+        "success": True,
+        "summary": {
+            "quoteTotalHt": float(quote_total_ht),
+            "billedTotal": float(billed_total),
+            "billedPercent": float(billed_percent),
+            "remainingPercent": float(remaining_percent),
+            "remainingHt": float(remaining_ht),
+            "depositInvoice": deposit_invoice,
+            "situations": sorted(situations, key=lambda x: x.get("situationNumber") or 0),
+            "retentionInvoices": retention_invoices,
+        },
+    }
+
+
+class DepositInvoiceCreate(SQLModel if False else object):
+    pass
+
+
+@router.post("/from-quote/{quote_id}/deposit", response_model=dict)
+def create_deposit_invoice(
+    quote_id: int,
+    body: dict = Body(...),
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session),
+):
+    """
+    Crée une facture d'acompte depuis un devis accepté.
+
+    Body: { deposit_percent: float, due_date?: str, notes?: str, retention_percent?: float }
+    """
+    quote = session.get(Quote, quote_id)
+    if not quote or quote.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Devis non trouvé")
+
+    deposit_pct = Decimal(str(body.get("deposit_percent", 30)))
+    if deposit_pct <= 0 or deposit_pct > 100:
+        raise HTTPException(status_code=400, detail="Le pourcentage d'acompte doit être entre 1 et 100")
+
+    # Vérifier qu'il n'y a pas déjà un acompte
+    existing_deposit = session.exec(
+        select(Invoice).where(Invoice.quote_id == quote_id, Invoice.invoice_type == "deposit")
+    ).first()
+    if existing_deposit:
+        raise HTTPException(status_code=400, detail="Une facture d'acompte existe déjà pour ce devis")
+
+    # Calcul du montant de l'acompte à partir des lignes du devis
+    quote_items = session.exec(
+        select(LineItem).where(LineItem.quote_id == quote_id)
+    ).all()
+    quote_ht = sum(
+        (i.quantity * i.unit_price * (1 - (i.discount_percent or Decimal(0)) / 100))
+        for i in quote_items
+    )
+    deposit_ht = (quote_ht * deposit_pct / 100).quantize(Decimal("0.01"))
+
+    company = session.get(Company, current_user.company_id)
+    reference = generate_invoice_reference(session, current_user.company_id)
+
+    due_date_str = body.get("due_date")
+    due_date = date.fromisoformat(due_date_str) if due_date_str else date.today() + timedelta(days=30)
+    retention_pct = Decimal(str(body.get("retention_percent", 0))) or None
+
+    invoice = Invoice(
+        company_id=current_user.company_id,
+        customer_id=quote.customer_id,
+        project_id=quote.project_id,
+        quote_id=quote_id,
+        reference=reference,
+        status=InvoiceStatus.DRAFT,
+        description=f"Acompte {float(deposit_pct):.0f}% — {quote.description or quote.reference}",
+        invoice_date=date.today(),
+        due_date=due_date,
+        invoice_type="deposit",
+        deposit_percent=deposit_pct,
+        retention_percent=retention_pct if retention_pct and retention_pct > 0 else None,
+        payment_terms=body.get("notes") or (company.default_payment_terms if company else None),
+        bank_details=_default_bank_details(company),
+        conditions=company.default_conditions if company else None,
+        created_by_id=current_user.id,
+    )
+    session.add(invoice)
+    session.commit()
+    session.refresh(invoice)
+
+    # Créer une seule ligne : "Acompte X% sur devis DEV2026XXXX"
+    # Taux TVA = taux dominant des lignes du devis (ou 20%)
+    dominant_tva = Decimal(20)
+    if quote_items:
+        from collections import Counter
+        tva_counts = Counter(float(i.tax_rate) for i in quote_items)
+        dominant_tva = Decimal(str(tva_counts.most_common(1)[0][0]))
+
+    line = LineItem(
+        invoice_id=invoice.id,
+        description=f"Acompte {float(deposit_pct):.0f}% — Devis {quote.reference}",
+        item_type=LineItemType.SUPPLY,
+        quantity=Decimal(1),
+        unit="forf.",
+        unit_price=deposit_ht,
+        tax_rate=dominant_tva,
+        display_order=0,
+    )
+    session.add(line)
+    session.commit()
+
+    return {"success": True, "invoice": get_invoice_response(invoice, session)}
+
+
+@router.post("/from-quote/{quote_id}/situation", response_model=dict)
+def create_situation_invoice(
+    quote_id: int,
+    body: dict = Body(...),
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session),
+):
+    """
+    Crée une facture de situation (avancement travaux).
+
+    Body: {
+        situation_percent: float,        # % de cette situation
+        due_date?: str,
+        notes?: str,
+        retention_percent?: float,       # 5 par défaut si BTP
+        line_items?: list                # optionnel, si détail par poste
+    }
+    """
+    quote = session.get(Quote, quote_id)
+    if not quote or quote.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Devis non trouvé")
+
+    situation_pct = Decimal(str(body.get("situation_percent", 0)))
+    if situation_pct <= 0 or situation_pct > 100:
+        raise HTTPException(status_code=400, detail="Le pourcentage de situation doit être entre 1 et 100")
+
+    # Récupérer les situations existantes pour calculer le cumul
+    previous_situations = session.exec(
+        select(Invoice).where(
+            Invoice.quote_id == quote_id,
+            Invoice.invoice_type == "situation",
+        )
+    ).all()
+    situation_number = len(previous_situations) + 1
+
+    # Cumul previous
+    prev_cumul = sum(
+        (inv.situation_percent or Decimal(0)) for inv in previous_situations
+    )
+    # Ajouter aussi l'acompte dans le cumul
+    deposit_inv = session.exec(
+        select(Invoice).where(Invoice.quote_id == quote_id, Invoice.invoice_type == "deposit")
+    ).first()
+    if deposit_inv and deposit_inv.deposit_percent:
+        prev_cumul += deposit_inv.deposit_percent
+
+    new_cumulative = prev_cumul + situation_pct
+    if new_cumulative > Decimal(100):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ce pourcentage dépasserait 100 % (déjà facturé : {float(prev_cumul):.1f}%)",
+        )
+
+    # Montant HT de la situation
+    quote_items = session.exec(select(LineItem).where(LineItem.quote_id == quote_id)).all()
+    quote_ht = sum(
+        (i.quantity * i.unit_price * (1 - (i.discount_percent or Decimal(0)) / 100))
+        for i in quote_items
+    )
+    situation_ht = (quote_ht * situation_pct / 100).quantize(Decimal("0.01"))
+
+    company = session.get(Company, current_user.company_id)
+    reference = generate_invoice_reference(session, current_user.company_id)
+    due_date_str = body.get("due_date")
+    due_date = date.fromisoformat(due_date_str) if due_date_str else date.today() + timedelta(days=30)
+    retention_pct_raw = body.get("retention_percent")
+    retention_pct: Optional[Decimal] = Decimal(str(retention_pct_raw)) if retention_pct_raw else None
+
+    invoice = Invoice(
+        company_id=current_user.company_id,
+        customer_id=quote.customer_id,
+        project_id=quote.project_id,
+        quote_id=quote_id,
+        reference=reference,
+        status=InvoiceStatus.DRAFT,
+        description=f"Situation n°{situation_number} — {float(situation_pct):.0f}% — {quote.description or quote.reference}",
+        invoice_date=date.today(),
+        due_date=due_date,
+        invoice_type="situation",
+        situation_number=situation_number,
+        situation_percent=situation_pct,
+        cumulative_percent=new_cumulative,
+        retention_percent=retention_pct if retention_pct and retention_pct > 0 else None,
+        payment_terms=body.get("notes") or (company.default_payment_terms if company else None),
+        bank_details=_default_bank_details(company),
+        conditions=company.default_conditions if company else None,
+        created_by_id=current_user.id,
+    )
+    session.add(invoice)
+    session.commit()
+    session.refresh(invoice)
+
+    # Lignes personnalisées ou ligne synthétique
+    custom_items = body.get("line_items")
+    if custom_items:
+        for i, item_data in enumerate(custom_items):
+            raw_type = item_data.get("item_type") or "supply"
+            try:
+                resolved_type = LineItemType(raw_type)
+            except ValueError:
+                resolved_type = LineItemType.SUPPLY
+            line = LineItem(
+                invoice_id=invoice.id,
+                description=item_data.get("designation") or item_data.get("description") or "",
+                item_type=resolved_type,
+                quantity=Decimal(str(item_data.get("quantity") or 1)),
+                unit=item_data.get("unit", "u"),
+                unit_price=Decimal(str(item_data.get("unit_price") or 0)),
+                tax_rate=Decimal(str(item_data.get("vat_rate") or 20)),
+                display_order=i,
+            )
+            session.add(line)
+    else:
+        # Taux TVA dominant du devis
+        from collections import Counter
+        dominant_tva = Decimal(20)
+        if quote_items:
+            tva_counts = Counter(float(i.tax_rate) for i in quote_items)
+            dominant_tva = Decimal(str(tva_counts.most_common(1)[0][0]))
+
+        line = LineItem(
+            invoice_id=invoice.id,
+            description=f"Situation n°{situation_number} ({float(situation_pct):.0f}%) — Devis {quote.reference}",
+            long_description=f"Avancement cumulé : {float(new_cumulative):.1f}%",
+            item_type=LineItemType.SUPPLY,
+            quantity=Decimal(1),
+            unit="forf.",
+            unit_price=situation_ht,
+            tax_rate=dominant_tva,
+            display_order=0,
+        )
+        session.add(line)
+
+    session.commit()
+
+    return {"success": True, "invoice": get_invoice_response(invoice, session)}
+
+
+@router.post("/{invoice_id}/release-retention", response_model=dict)
+def release_retention(
+    invoice_id: int,
+    body: dict = Body(default={}),
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session),
+):
+    """
+    Libère la retenue de garantie d'une facture en créant une facture de
+    libération de retenue (invoice_type = 'retention_release').
+    Typiquement émise 1 an après réception des travaux.
+    """
+    origin = session.get(Invoice, invoice_id)
+    if not origin or origin.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Facture non trouvée")
+
+    if not origin.retention_percent or origin.retention_percent <= 0:
+        raise HTTPException(status_code=400, detail="Cette facture n'a pas de retenue de garantie")
+
+    if origin.retention_released:
+        raise HTTPException(status_code=400, detail="La retenue de garantie a déjà été libérée")
+
+    if origin.retention_release_invoice_id:
+        raise HTTPException(status_code=400, detail="Une facture de libération existe déjà")
+
+    # Calcul du montant de la retenue HT
+    origin_response = get_invoice_response(origin, session)
+    retention_ht = Decimal(str(origin_response["totalHt"])) * origin.retention_percent / 100
+
+    company = session.get(Company, current_user.company_id)
+    reference = generate_invoice_reference(session, current_user.company_id)
+    due_date_str = body.get("due_date")
+    due_date = date.fromisoformat(due_date_str) if due_date_str else date.today() + timedelta(days=30)
+
+    # Taux TVA de la facture d'origine
+    origin_items = session.exec(
+        select(LineItem).where(LineItem.invoice_id == invoice_id)
+    ).all()
+    from collections import Counter
+    dominant_tva = Decimal(20)
+    if origin_items:
+        tva_counts = Counter(float(i.tax_rate) for i in origin_items)
+        dominant_tva = Decimal(str(tva_counts.most_common(1)[0][0]))
+
+    release_invoice = Invoice(
+        company_id=current_user.company_id,
+        customer_id=origin.customer_id,
+        project_id=origin.project_id,
+        quote_id=origin.quote_id,
+        reference=reference,
+        status=InvoiceStatus.DRAFT,
+        description=f"Libération retenue de garantie — {origin.reference}",
+        invoice_date=date.today(),
+        due_date=due_date,
+        invoice_type="retention_release",
+        original_invoice_id=invoice_id,
+        notes=body.get("notes") or f"Libération de la retenue de garantie ({float(origin.retention_percent):.0f}%) "
+              f"relative à la facture {origin.reference}.",
+        payment_terms=company.default_payment_terms if company else None,
+        bank_details=_default_bank_details(company),
+        conditions=company.default_conditions if company else None,
+        created_by_id=current_user.id,
+    )
+    session.add(release_invoice)
+    session.commit()
+    session.refresh(release_invoice)
+
+    line = LineItem(
+        invoice_id=release_invoice.id,
+        description=f"Libération retenue de garantie {float(origin.retention_percent):.0f}% — {origin.reference}",
+        item_type=LineItemType.SUPPLY,
+        quantity=Decimal(1),
+        unit="forf.",
+        unit_price=retention_ht.quantize(Decimal("0.01")),
+        tax_rate=dominant_tva,
+        display_order=0,
+    )
+    session.add(line)
+
+    # Marquer la facture d'origine comme retenue libérée
+    origin.retention_released = True
+    origin.retention_release_invoice_id = release_invoice.id
+    origin.updated_at = datetime.utcnow()
+    session.add(origin)
+    session.commit()
+
+    return {"success": True, "invoice": get_invoice_response(release_invoice, session)}
+
+
+# ─── Relances ─────────────────────────────────────────────────────────────────
+
+@router.post("/{invoice_id}/send-reminder", response_model=dict)
+def send_reminder(
+    invoice_id: int,
+    body: dict = Body(default={}),
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session),
+) -> dict:
+    """Enregistre l'envoi d'une relance pour une facture impayée."""
+    invoice = session.get(Invoice, invoice_id)
+    if not invoice or invoice.company_id != current_user.company_id:
+        raise HTTPException(status_code=404, detail="Facture introuvable")
+    if invoice.status not in (InvoiceStatus.SENT, InvoiceStatus.PARTIAL, InvoiceStatus.OVERDUE):
+        raise HTTPException(status_code=400, detail="La relance n'est possible que pour les factures impayées")
+
+    invoice.reminder_count = (invoice.reminder_count or 0) + 1
+    invoice.last_reminder_at = datetime.utcnow()
+    invoice.updated_at = datetime.utcnow()
+    session.add(invoice)
+    session.commit()
+    session.refresh(invoice)
+    return {"success": True, "reminder_count": invoice.reminder_count, "last_reminder_at": invoice.last_reminder_at}
+
+
+@router.get("/overdue", response_model=dict)
+def get_overdue_invoices(
+    current_user: User = Depends(get_current_user_required),
+    session: Session = Depends(get_session),
+) -> dict:
+    """Liste toutes les factures en retard ou impayées avec statistiques de relance."""
+    today = date.today()
+    invoices = session.exec(
+        select(Invoice).where(
+            Invoice.company_id == current_user.company_id,
+            Invoice.status.in_([InvoiceStatus.SENT, InvoiceStatus.PARTIAL, InvoiceStatus.OVERDUE]),
+        )
+    ).all()
+
+    result = []
+    total_overdue = Decimal(0)
+    total_pending = Decimal(0)
+
+    for inv in invoices:
+        resp = get_invoice_response(inv, session)
+        remaining = Decimal(str(resp.get("remainingAmount", 0) or 0))
+        is_overdue = inv.due_date and inv.due_date < today
+        days_overdue = (today - inv.due_date).days if is_overdue and inv.due_date else 0
+
+        resp["isOverdue"] = is_overdue
+        resp["daysOverdue"] = days_overdue
+        resp["reminderCount"] = inv.reminder_count or 0
+        resp["lastReminderAt"] = inv.last_reminder_at.isoformat() if inv.last_reminder_at else None
+
+        if is_overdue:
+            total_overdue += remaining
+        else:
+            total_pending += remaining
+
+        result.append(resp)
+
+    # Sort: overdue first, then by days overdue desc, then by amount desc
+    result.sort(key=lambda x: (-x["isOverdue"], -x["daysOverdue"], -float(x.get("remainingAmount") or 0)))
+
+    return {
+        "success": True,
+        "invoices": result,
+        "stats": {
+            "total": len(result),
+            "overdue_count": sum(1 for r in result if r["isOverdue"]),
+            "pending_count": sum(1 for r in result if not r["isOverdue"]),
+            "total_overdue_amount": float(total_overdue),
+            "total_pending_amount": float(total_pending),
+            "total_amount": float(total_overdue + total_pending),
+        },
+    }
+
+
+
 def download_invoice_pdf(
     invoice_id: int,
     current_user: User = Depends(get_current_user_required),

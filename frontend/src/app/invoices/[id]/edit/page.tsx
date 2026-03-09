@@ -1,16 +1,20 @@
 ﻿'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { MainLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select } from '@/components/ui';
+import { DocumentCompletionCard } from '@/components/documents/DocumentCompletionCard';
 import { PdfSettingsCard } from '@/components/documents/PdfSettingsCard';
+import { PresetChips } from '@/components/documents/PresetChips';
+import { UnsavedChangesBadge } from '@/components/documents/UnsavedChangesBadge';
 import { invoiceService, customerService, projectService, settingsService } from '@/services/api';
 import { Customer, InvoiceCreate, LineItem, LineItemType, Project } from '@/types';
 import { LineItemsEditor, LineItemData } from '@/components/quotes/LineItemsEditor';
 import InvoicePreview, { InvoicePreviewData, InvoiceCustomer, InvoiceCompany } from '@/components/invoices/InvoicePreview';
 import { CompanySettingsData, getDocumentDefaultsFromCompany } from '@/lib/company-settings';
 import { buildDetailPath } from '@/lib/routes';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 
@@ -95,6 +99,7 @@ export default function EditInvoicePage() {
   const router = useRouter();
   const params = useParams();
   const invoiceId = parseInt(params.id as string);
+  const draftHydratedRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -106,8 +111,10 @@ export default function EditInvoicePage() {
   const [companySettings, setCompanySettings] = useState<CompanySettingsData | null>(null);
   const [invoiceCompany, setInvoiceCompany] = useState<InvoiceCompany | null>(null);
   const [invoiceRef, setInvoiceRef] = useState<string | undefined>();
+  const [draftMessage, setDraftMessage] = useState('');
 
   const [lineItems, setLineItems] = useState<LineItemData[]>([]);
+  const INVOICE_EDIT_DRAFT_KEY = `blackbox.invoice.edit.draft.${invoiceId}.v1`;
 
   const [formData, setFormData] = useState({
     customer_id: 0,
@@ -122,6 +129,12 @@ export default function EditInvoicePage() {
     conditions: '',
     discount_percent: 0,
   });
+  const { isDirty, captureBaseline, confirmIfDirty } = useUnsavedChanges({ formData, lineItems });
+
+  const clearDraft = () => {
+    localStorage.removeItem(INVOICE_EDIT_DRAFT_KEY);
+    setDraftMessage('Brouillon local supprimé.');
+  };
 
   /* ── Load data ─────────────────────────────────────────────────────── */
   const loadData = useCallback(async () => {
@@ -146,7 +159,7 @@ export default function EditInvoicePage() {
         setInvoiceRef(inv.reference);
         setInvoiceCompany(inv.company ?? null);
 
-        setFormData({
+        const loadedFormData = {
           customer_id: inv.customer_id ?? inv.customerId ?? 0,
           project_id: inv.project_id ?? inv.projectId ?? undefined,
           description: inv.description ?? '',
@@ -158,10 +171,35 @@ export default function EditInvoicePage() {
           purchase_order: inv.purchaseOrder ?? inv.purchase_order ?? '',
           conditions: inv.conditions ?? inv.terms_and_conditions ?? companyDefaults.conditions,
           discount_percent: 0,
-        });
+        };
 
         const rawItems = inv.lineItems ?? inv.line_items ?? [];
-        setLineItems(rawItems.map(toLineItemData));
+        const loadedItems = rawItems.map(toLineItemData);
+
+        const savedDraft = localStorage.getItem(INVOICE_EDIT_DRAFT_KEY);
+        if (savedDraft) {
+          try {
+            const parsed = JSON.parse(savedDraft) as {
+              formData?: typeof loadedFormData;
+              lineItems?: LineItemData[];
+            };
+            const restoredFormData = { ...loadedFormData, ...(parsed.formData || {}) };
+            const restoredLineItems = Array.isArray(parsed.lineItems) ? parsed.lineItems : loadedItems;
+            setFormData(restoredFormData);
+            setLineItems(restoredLineItems);
+            captureBaseline({ formData: restoredFormData, lineItems: restoredLineItems });
+            setDraftMessage('Brouillon local restauré automatiquement.');
+          } catch (error) {
+            console.error('Error restoring invoice edit draft:', error);
+            setFormData(loadedFormData);
+            setLineItems(loadedItems);
+            captureBaseline({ formData: loadedFormData, lineItems: loadedItems });
+          }
+        } else {
+          setFormData(loadedFormData);
+          setLineItems(loadedItems);
+          captureBaseline({ formData: loadedFormData, lineItems: loadedItems });
+        }
       }
 
       if (customersRes.success) {
@@ -176,11 +214,39 @@ export default function EditInvoicePage() {
       console.error('Error loading invoice:', err);
       setError('Impossible de charger la facture.');
     } finally {
+      draftHydratedRef.current = true;
       setLoading(false);
     }
   }, [invoiceId]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  useEffect(() => {
+    if (!draftHydratedRef.current) return;
+
+    const hasMeaningfulData = Boolean(
+      formData.customer_id
+      || (formData.description || '').trim()
+      || (formData.notes || '').trim()
+      || lineItems.length > 0
+    );
+
+    if (!hasMeaningfulData) return;
+
+    const timeout = setTimeout(() => {
+      localStorage.setItem(
+        INVOICE_EDIT_DRAFT_KEY,
+        JSON.stringify({
+          formData,
+          lineItems,
+          updatedAt: new Date().toISOString(),
+        }),
+      );
+      setDraftMessage('Brouillon local enregistré.');
+    }, 500);
+
+    return () => clearTimeout(timeout);
+  }, [INVOICE_EDIT_DRAFT_KEY, formData, lineItems]);
 
   /* ── Handlers ──────────────────────────────────────────────────────── */
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -209,6 +275,14 @@ export default function EditInvoicePage() {
     return s + lineHt * i.vat_rate / 100;
   }, 0);
   const totalTtc = totalHt + totalTva;
+  const invoiceReadiness = [
+    { label: 'Client sélectionné', done: Boolean(formData.customer_id), helper: 'La facture reste rattachée au bon client.' },
+    { label: 'Objet renseigné', done: Boolean((formData.description || '').trim()), helper: 'Visible dans la liste et sur le PDF.' },
+    { label: 'Date d’échéance définie', done: Boolean(formData.due_date), helper: 'Nécessaire pour le suivi d’échéance.' },
+    { label: 'Au moins une ligne chiffrée', done: billable.length > 0, helper: 'Conservez au moins une ligne facturable.' },
+    { label: 'Conditions de paiement', done: Boolean((formData.payment_terms || '').trim()), helper: 'Délais ou modalité claire pour le client.' },
+    { label: 'Paramètres PDF configurés', done: Boolean(companySettings?.logo_url || companySettings?.header_text || companySettings?.footer_text || companySettings?.iban), helper: 'Logo, entête, pied de page ou banque.' },
+  ];
   const fmt = (n: number) => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 
   /* ── Submit ────────────────────────────────────────────────────────── */
@@ -239,6 +313,8 @@ export default function EditInvoicePage() {
       const res = await invoiceService.update(invoiceId, payload);
 
       if (res.success) {
+        localStorage.removeItem(INVOICE_EDIT_DRAFT_KEY);
+        captureBaseline({ formData, lineItems });
         router.push(buildDetailPath('invoices', invoiceId));
       } else {
         setError('Erreur lors de la sauvegarde.');
@@ -268,7 +344,14 @@ export default function EditInvoicePage() {
     bankDetails: formData.bank_details,
     discountPercent: formData.discount_percent,
     lineItems,
-    company: invoiceCompany,
+    // Merge the invoice's stored company snapshot with the current PDF settings
+    // so headerText / footerText (configured in settings) are always reflected.
+    company: {
+      ...(invoiceCompany ?? {}),
+      headerText: companySettings?.header_text ?? undefined,
+      footerText: companySettings?.footer_text ?? undefined,
+      logoUrl: invoiceCompany?.logoUrl ?? companySettings?.logo_url ?? undefined,
+    } as InvoiceCompany,
     customer: previewCustomer
       ? ({
           id: previewCustomer.id,
@@ -314,6 +397,9 @@ export default function EditInvoicePage() {
               Modifier la facture {invoiceRef ? `· ${invoiceRef}` : ''}
             </h1>
             <p className="text-sm text-gray-500">Facture conforme aux exigences légales françaises</p>
+            <div className="mt-2">
+              <UnsavedChangesBadge isDirty={isDirty} />
+            </div>
           </div>
           {/* Tab toggle */}
           <div className="flex rounded-lg border border-gray-200 overflow-hidden">
@@ -339,6 +425,11 @@ export default function EditInvoicePage() {
         </div>
 
         <PdfSettingsCard company={companySettings} documentLabel="facture" />
+        <DocumentCompletionCard
+          title="Complétude de la facture"
+          subtitle="Contrôle rapide avant sauvegarde ou impression."
+          items={invoiceReadiness}
+        />
 
         {error && (
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
@@ -388,7 +479,10 @@ export default function EditInvoicePage() {
 
             {/* ── Client & Projet ──────────────────────────────────── */}
             <Card>
-              <CardHeader><CardTitle>Client et projet</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle>Client et projet</CardTitle>
+                <p className="text-sm text-slate-500">Étape 1 · vérifiez le client facturé et le projet rattaché.</p>
+              </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-4">
                   <Select
@@ -418,9 +512,11 @@ export default function EditInvoicePage() {
               </CardContent>
             </Card>
 
-            {/* ── Dates & Référence commande ────────────────────────── */}
             <Card>
-              <CardHeader><CardTitle>Dates et références</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle>Dates et références</CardTitle>
+                <p className="text-sm text-slate-500">Étape 2 · contrôlez l’émission, l’échéance et les références client.</p>
+              </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-3 gap-4">
                   <Input
@@ -445,12 +541,23 @@ export default function EditInvoicePage() {
                     placeholder="Réf. client (si fourni)"
                   />
                 </div>
+                <div className="mt-4">
+                  <PresetChips
+                    label="Délais rapides"
+                    options={[
+                      { label: '15 jours', onClick: () => setFormData(prev => ({ ...prev, due_date: new Date(new Date(prev.invoice_date).getTime() + 15 * 24 * 3600 * 1000).toISOString().split('T')[0] })), active: Boolean(formData.invoice_date && formData.due_date === new Date(new Date(formData.invoice_date).getTime() + 15 * 24 * 3600 * 1000).toISOString().split('T')[0]) },
+                      { label: '30 jours', onClick: () => setFormData(prev => ({ ...prev, due_date: new Date(new Date(prev.invoice_date).getTime() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0] })), active: Boolean(formData.invoice_date && formData.due_date === new Date(new Date(formData.invoice_date).getTime() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0]) },
+                      { label: '45 jours', onClick: () => setFormData(prev => ({ ...prev, due_date: new Date(new Date(prev.invoice_date).getTime() + 45 * 24 * 3600 * 1000).toISOString().split('T')[0] })), active: Boolean(formData.invoice_date && formData.due_date === new Date(new Date(formData.invoice_date).getTime() + 45 * 24 * 3600 * 1000).toISOString().split('T')[0]) },
+                    ]}
+                  />
+                </div>
               </CardContent>
             </Card>
 
-            {/* ── Lignes ──────────────────────────────────────────────── */}
             <Card>
-              <CardHeader><CardTitle>Lignes de facturation</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Lignes de facturation</CardTitle>
+                <p className="text-sm text-slate-500">Étape 3 · ajustez chaque ligne, quantité, remise et TVA avec précision.</p>
+              </CardHeader>
               <CardContent>
                 <LineItemsEditor items={lineItems} onChange={setLineItems} />
               </CardContent>
@@ -458,7 +565,9 @@ export default function EditInvoicePage() {
 
             {/* ── Totaux ──────────────────────────────────────────────── */}
             <Card>
-              <CardHeader><CardTitle>Récapitulatif</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Récapitulatif</CardTitle>
+                <p className="text-sm text-slate-500">Étape 4 · validez le HT, la remise, la TVA et le TTC avant sauvegarde.</p>
+              </CardHeader>
               <CardContent>
                 <div className="flex gap-6 items-start">
                   <div className="w-40">
@@ -503,7 +612,9 @@ export default function EditInvoicePage() {
 
             {/* ── Informations de paiement ─────────────────────────── */}
             <Card>
-              <CardHeader><CardTitle>Informations de paiement</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Informations de paiement</CardTitle>
+                <p className="text-sm text-slate-500">Étape 5 · précisez le règlement attendu sans doubler les données PDF globales.</p>
+              </CardHeader>
               <CardContent className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -518,6 +629,14 @@ export default function EditInvoicePage() {
                     placeholder="Ex : Paiement à 30 jours fin de mois..."
                   />
                 </div>
+                <PresetChips
+                  label="Formules rapides"
+                  options={[
+                    { label: 'À réception', onClick: () => setFormData(prev => ({ ...prev, payment_terms: 'Paiement à réception de facture.' })), active: formData.payment_terms === 'Paiement à réception de facture.' },
+                    { label: '30 jours', onClick: () => setFormData(prev => ({ ...prev, payment_terms: 'Paiement à 30 jours fin de mois.' })), active: formData.payment_terms === 'Paiement à 30 jours fin de mois.' },
+                    { label: 'Virement SEPA', onClick: () => setFormData(prev => ({ ...prev, payment_terms: 'Paiement par virement SEPA.' })), active: formData.payment_terms === 'Paiement par virement SEPA.' },
+                  ]}
+                />
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
                   Les coordonnées bancaires, le pied de page et les mentions légales proviennent des paramètres PDF.
                   Laissez-les centralisés pour garder des factures cohérentes et rapides à produire.
@@ -528,42 +647,76 @@ export default function EditInvoicePage() {
             {/* ── Notes & Conditions ──────────────────────────────────── */}
             <Card>
               <CardHeader>
-                <CardTitle>Notes et conditions légales</CardTitle>
+                <CardTitle>Notes</CardTitle>
+                <p className="text-sm text-slate-500">Étape 6 · ajoutez une note personnalisée visible sur la facture.</p>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Notes (visibles sur la facture)</label>
                   <textarea
                     name="notes"
-                    rows={2}
+                    rows={3}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={formData.notes}
                     onChange={handleChange}
+                    placeholder="Informations complémentaires à destination du client..."
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Conditions & mentions légales obligatoires
-                    <span className="ml-2 text-xs font-normal text-blue-600">(pénalités de retard, escompte, etc.)</span>
-                  </label>
-                  <textarea
-                    name="conditions"
-                    rows={4}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={formData.conditions}
-                    onChange={handleChange}
-                    placeholder="En cas de retard de paiement, des pénalités au taux de 3 fois le taux légal seront appliquées, ainsi qu'une indemnité forfaitaire de recouvrement de 40 €. Aucun escompte pour paiement anticipé."
-                  />
-                </div>
+
+                {/* Conditions légales – collapsible since auto-filled from settings */}
+                <details className="group rounded-xl border border-slate-200 bg-slate-50">
+                  <summary className="flex cursor-pointer items-center justify-between px-4 py-3 text-sm font-medium text-slate-700 select-none list-none">
+                    <span className="flex items-center gap-2">
+                      <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-500">i</span>
+                      Conditions &amp; mentions légales obligatoires
+                      <span className="text-xs font-normal text-slate-400">(pénalités de retard, escompte…)</span>
+                    </span>
+                    <span className="text-slate-400 transition group-open:rotate-180">▾</span>
+                  </summary>
+                  <div className="border-t border-slate-200 px-4 pb-4 pt-3">
+                    <p className="mb-2 text-xs text-slate-500">
+                      Ces mentions sont pré-remplies depuis vos{' '}
+                      <a href="/settings?tab=documents&doc=cgv" className="font-medium text-blue-600 hover:underline">
+                        paramètres PDF
+                      </a>
+                      . Modifiez-les ici uniquement pour cette facture.
+                    </p>
+                    <textarea
+                      name="conditions"
+                      rows={4}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={formData.conditions}
+                      onChange={handleChange}
+                      placeholder="En cas de retard de paiement, des pénalités au taux de 3 fois le taux légal seront appliquées, ainsi qu'une indemnité forfaitaire de recouvrement de 40 €. Aucun escompte pour paiement anticipé."
+                    />
+                  </div>
+                </details>
               </CardContent>
             </Card>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-slate-900">Brouillon local de modification</p>
+                  <p className="mt-1 text-xs text-slate-500">Les changements de cette facture sont enregistrés localement pendant l’édition.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearDraft}
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                >
+                  Vider le brouillon
+                </button>
+              </div>
+              {draftMessage && <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">{draftMessage}</p>}
+            </div>
 
             {/* ── Actions ──────────────────────────────────────────────── */}
             <div className="flex justify-between items-center">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => router.push(buildDetailPath('invoices', invoiceId))}
+                onClick={() => { if (confirmIfDirty()) router.push(buildDetailPath('invoices', invoiceId)); }}
               >
                 Annuler
               </Button>

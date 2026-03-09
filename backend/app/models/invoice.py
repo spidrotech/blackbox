@@ -49,10 +49,27 @@ class Invoice(SQLModel, table=True):
     conditions: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))  # CGV / conditions générales
     
     # Type de facture
-    invoice_type: str = Field(default="invoice", max_length=50)  # invoice, credit_note, proforma
+    invoice_type: str = Field(default="invoice", max_length=50)  # invoice, deposit, situation, credit_note, retention_release, proforma
     
+    # Facture d'acompte
+    deposit_percent: Optional[Decimal] = Field(default=None, max_digits=5, decimal_places=2)
+
+    # Facture de situation (avancement travaux)
+    situation_number: Optional[int] = Field(default=None)           # N° de la situation (1, 2, 3…)
+    situation_percent: Optional[Decimal] = Field(default=None, max_digits=5, decimal_places=2)  # % de cette situation
+    cumulative_percent: Optional[Decimal] = Field(default=None, max_digits=5, decimal_places=2)  # % cumulé facturé
+
+    # Retenue de garantie (BTP – 5 % par défaut, libérée sur réception)
+    retention_percent: Optional[Decimal] = Field(default=None, max_digits=5, decimal_places=2)
+    retention_released: bool = Field(default=False)
+    retention_release_invoice_id: Optional[int] = Field(default=None, foreign_key="invoices.id")
+
     # Lien avoir → facture originale
     original_invoice_id: Optional[int] = Field(default=None, foreign_key="invoices.id")
+
+    # Relances paiement
+    reminder_count: int = Field(default=0)
+    last_reminder_at: Optional[datetime] = Field(default=None)
     
     # Factur-X / e-invoicing (conformité loi française 2026)
     facturx_status: Optional[str] = Field(default=None, max_length=30)  # pending, generated, sent
@@ -109,6 +126,11 @@ class InvoiceCreate(SQLModel):
     purchase_order: Optional[str] = None
     conditions: Optional[str] = None
     invoice_type: str = "invoice"
+    deposit_percent: Optional[Decimal] = None
+    situation_number: Optional[int] = None
+    situation_percent: Optional[Decimal] = None
+    retention_percent: Optional[Decimal] = None
+    siren_buyer: Optional[str] = None
     line_items: Optional[List[dict]] = None
 
 
@@ -127,6 +149,16 @@ class InvoiceRead(SQLModel):
     amount_paid: Optional[Decimal]
     notes: Optional[str]
     invoice_type: str
+    deposit_percent: Optional[Decimal] = None
+    situation_number: Optional[int] = None
+    situation_percent: Optional[Decimal] = None
+    cumulative_percent: Optional[Decimal] = None
+    retention_percent: Optional[Decimal] = None
+    retention_released: bool = False
+    original_invoice_id: Optional[int] = None
+    facturx_status: Optional[str] = None
+    reminder_count: int = 0
+    last_reminder_at: Optional[datetime] = None
     total_ht: Optional[Decimal] = None
     total_tva: Optional[Decimal] = None
     total_ttc: Optional[Decimal] = None
@@ -148,6 +180,9 @@ class InvoiceUpdate(SQLModel):
     bank_details: Optional[str] = None
     purchase_order: Optional[str] = None
     conditions: Optional[str] = None
+    retention_percent: Optional[Decimal] = None
+    retention_released: Optional[bool] = None
+    siren_buyer: Optional[str] = None
     line_items: Optional[List[dict]] = None
 
 

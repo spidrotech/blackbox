@@ -27,6 +27,7 @@ import {
   PriceLibraryImportPayload,
   PriceLibraryImportResult,
   DashboardData,
+  SituationsSummary,
 } from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
@@ -356,6 +357,21 @@ export const quoteService = {
     const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : '';
     return `${API_URL}/quotes/${id}/pdf?token=${token}`;
   },
+
+  // ── Avenants ────────────────────────────────────────────────────────────
+
+  async createAvenant(
+    quoteId: number,
+    data?: { description?: string; notes?: string; expiry_date?: string; line_items?: object[] }
+  ): Promise<ApiResponse<Quote>> {
+    const response = await api.post<ApiResponse<Quote>>(`/quotes/${quoteId}/avenant`, data ?? {});
+    return response.data;
+  },
+
+  async listAvenants(quoteId: number): Promise<{ success: boolean; avenants: Quote[] }> {
+    const response = await api.get(`/quotes/${quoteId}/avenants`);
+    return response.data;
+  },
 };
 
 // Invoice Service
@@ -452,6 +468,44 @@ export const invoiceService = {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
+  },
+
+  // ── BTP Features ────────────────────────────────────────────────────────
+
+  async createDepositInvoice(
+    quoteId: number,
+    data: { deposit_percent: number; due_date?: string; notes?: string; retention_percent?: number }
+  ): Promise<ApiResponse<Invoice>> {
+    const response = await api.post<ApiResponse<Invoice>>(`/invoices/from-quote/${quoteId}/deposit`, data);
+    return response.data;
+  },
+
+  async createSituationInvoice(
+    quoteId: number,
+    data: { situation_percent: number; due_date?: string; notes?: string; retention_percent?: number; line_items?: object[] }
+  ): Promise<ApiResponse<Invoice>> {
+    const response = await api.post<ApiResponse<Invoice>>(`/invoices/from-quote/${quoteId}/situation`, data);
+    return response.data;
+  },
+
+  async getSituationsSummary(quoteId: number): Promise<{ success: boolean; summary: SituationsSummary }> {
+    const response = await api.get(`/invoices/from-quote/${quoteId}/situations-summary`);
+    return response.data;
+  },
+
+  async releaseRetention(invoiceId: number, data?: { due_date?: string; notes?: string }): Promise<ApiResponse<Invoice>> {
+    const response = await api.post<ApiResponse<Invoice>>(`/invoices/${invoiceId}/release-retention`, data ?? {});
+    return response.data;
+  },
+
+  async sendReminder(invoiceId: number): Promise<{ success: boolean; reminder_count: number; last_reminder_at: string }> {
+    const response = await api.post(`/invoices/${invoiceId}/send-reminder`, {});
+    return response.data;
+  },
+
+  async getOverdueInvoices(): Promise<{ success: boolean; invoices: Invoice[]; stats: import('@/types').OverdueStats }> {
+    const response = await api.get('/invoices/overdue');
+    return response.data;
   },
 };
 
@@ -729,6 +783,11 @@ export const dashboardService = {
 
   async getCompanyProfitability(year?: number): Promise<ApiResponse<unknown>> {
     const response = await api.get<ApiResponse<unknown>>(`/dashboard/profitability/company${year ? `?year=${year}` : ''}`);
+    return response.data;
+  },
+
+  async getFinancialReport(year?: number): Promise<{ success: boolean } & import('@/types').FinancialReport> {
+    const response = await api.get(`/dashboard/reports/financial${year ? `?year=${year}` : ''}`);
     return response.data;
   },
 };

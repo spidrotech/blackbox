@@ -21,6 +21,20 @@ const BADGE: Record<string, { label: string; cls: string; dot: string }> = {
   cancelled: { label: 'Annulée',   cls: 'bg-gray-50 text-gray-500 ring-1 ring-gray-200', dot: 'bg-gray-400' },
 };
 
+const TYPE_BADGE: Record<string, { label: string; cls: string }> = {
+  invoice:           { label: 'Facture',     cls: 'bg-blue-100 text-blue-700' },
+  deposit:           { label: 'Acompte',     cls: 'bg-violet-100 text-violet-700' },
+  situation:         { label: 'Situation',   cls: 'bg-cyan-100 text-cyan-700' },
+  credit_note:       { label: 'Avoir',       cls: 'bg-orange-100 text-orange-700' },
+  retention_release: { label: 'Lib. retenue', cls: 'bg-teal-100 text-teal-700' },
+};
+
+const FACTURX_BADGE: Record<string, { label: string; cls: string }> = {
+  generated: { label: 'Factur-X', cls: 'bg-green-100 text-green-700' },
+  pending:   { label: 'Factur-X ?', cls: 'bg-yellow-100 text-yellow-700' },
+  sent:      { label: 'FX envoyé', cls: 'bg-green-50 text-green-600' },
+};
+
 const TABS = [
   { value: '',        label: 'Toutes',    color: 'text-gray-600' },
   { value: 'draft',   label: 'Brouillon', color: 'text-gray-500' },
@@ -31,6 +45,31 @@ const TABS = [
 ];
 
 const MONTH_FR = ['Jan','Fév','Mar','Avr','Mai','Jui','Jul','Aoû','Sep','Oct','Nov','Déc'];
+
+function exportInvoicesToCsv(invoices: Invoice[]) {
+  const rows = [
+    ['Référence', 'Type', 'Client', 'Date', 'Échéance', 'Statut', 'Total TTC (€)', 'Encaissé (€)', 'Restant (€)'],
+    ...invoices.map(inv => [
+      inv.reference ?? '',
+      inv.invoiceType ?? inv.invoice_type ?? 'invoice',
+      (inv.customer as { name?: string })?.name ?? '',
+      inv.invoiceDate ?? inv.invoice_date ?? '',
+      inv.dueDate ?? inv.due_date ?? '',
+      inv.status ?? '',
+      (inv.totalTtc ?? inv.total_ttc ?? 0).toString(),
+      (inv.amountPaid ?? inv.amount_paid ?? 0).toString(),
+      (inv.remainingAmount ?? 0).toString(),
+    ]),
+  ];
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `factures-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 type InvoiceListItemLike = Invoice & {
   total_ttc?: number;
@@ -196,6 +235,7 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
 
   useEffect(() => { loadData(); }, []);
 
@@ -276,13 +316,16 @@ export default function InvoicesPage() {
     const q = search.toLowerCase();
     return invoices.filter(inv => {
       const matchTab = tab === '' || inv.status === tab;
+      const invType = (inv as InvoiceListItemLike & { invoiceType?: string }).invoiceType ||
+                      (inv as InvoiceListItemLike & { invoice_type?: string }).invoice_type || 'invoice';
+      const matchType = typeFilter === '' || invType === typeFilter;
       const matchSearch = q === '' ||
         inv.reference.toLowerCase().includes(q) ||
         (inv.subject ?? '').toLowerCase().includes(q) ||
         customerLabel(getInvoiceCustomerId(inv as InvoiceListItemLike), customers).toLowerCase().includes(q);
-      return matchTab && matchSearch;
+      return matchTab && matchSearch && matchType;
     });
-  }, [invoices, customers, tab, search]);
+  }, [invoices, customers, tab, search, typeFilter]);
 
   /* ── Loading state ── */
   if (loading) {
@@ -314,6 +357,16 @@ export default function InvoicesPage() {
             </svg>
             Nouvelle facture
           </Link>
+          <button
+            onClick={() => exportInvoicesToCsv(filtered)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 text-sm font-medium bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl transition-colors"
+            title="Exporter en CSV"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            CSV
+          </button>
         </div>
 
         {/* ── KPI cards ── */}
@@ -399,8 +452,22 @@ export default function InvoicesPage() {
                 );
               })}
             </div>
-            <div className="w-52 pb-2 shrink-0">
-              <div className="relative">
+            <div className="flex items-center gap-2 pb-2 shrink-0">
+              {/* Type filter */}
+              <select
+                value={typeFilter}
+                onChange={e => setTypeFilter(e.target.value)}
+                className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-gray-50 text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              >
+                <option value="">Tous types</option>
+                <option value="invoice">Factures</option>
+                <option value="deposit">Acomptes</option>
+                <option value="situation">Situations</option>
+                <option value="credit_note">Avoirs</option>
+                <option value="retention_release">Lib. retenue</option>
+              </select>
+              {/* Search */}
+              <div className="w-48 relative">
                 <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
@@ -464,9 +531,26 @@ export default function InvoicesPage() {
                           <Link href={buildDetailPath('invoices', invoice.id)} className="text-sm font-semibold text-gray-900 hover:text-blue-600 transition-colors">
                             {invoice.reference}
                           </Link>
-                          {invoice.subject && (
-                            <p className="text-xs text-gray-400 truncate max-w-[180px] mt-0.5">{invoice.subject}</p>
-                          )}
+                          {(() => {
+                            const invType = (invoice as InvoiceListItemLike & { invoiceType?: string; invoice_type?: string }).invoiceType ||
+                                            (invoice as InvoiceListItemLike & { invoice_type?: string }).invoice_type || 'invoice';
+                            const tb = TYPE_BADGE[invType];
+                            const fx = (invoice as InvoiceListItemLike & { facturxStatus?: string }).facturxStatus;
+                            const fxb = fx ? FACTURX_BADGE[fx] : null;
+                            return (
+                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                {tb && invType !== 'invoice' && (
+                                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${tb.cls}`}>{tb.label}</span>
+                                )}
+                                {fxb && (
+                                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${fxb.cls}`}>{fxb.label}</span>
+                                )}
+                                {invoice.subject && !tb && (
+                                  <p className="text-xs text-gray-400 truncate max-w-[180px]">{invoice.subject}</p>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
                         {/* Client */}
                         <td className="px-5 py-4">

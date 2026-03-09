@@ -180,6 +180,31 @@ export default function QuotesPage() {
     catch { showToast('Erreur suppression', 'error'); }
   };
 
+  const exportQuotesToCsv = () => {
+    const rows = [
+      ['Référence', 'Client', 'Date', 'Validité', 'Statut', 'HT (€)', 'TVA (€)', 'TTC (€)', 'Objet'],
+      ...filteredQuotes.map(q => [
+        q.reference ?? '',
+        (q.customer as { name?: string })?.name ?? '',
+        q.quoteDate ?? q.quote_date ?? '',
+        q.validUntil ?? q.valid_until ?? '',
+        q.status ?? '',
+        (q.totalHt ?? q.total_ht ?? 0).toString(),
+        (q.totalTva ?? q.total_tva ?? 0).toString(),
+        (q.totalTtc ?? q.total_ttc ?? 0).toString(),
+        q.subject ?? '',
+      ]),
+    ];
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `devis-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) {
     return (
       <MainLayout>
@@ -207,6 +232,16 @@ export default function QuotesPage() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
             Nouveau devis
           </Link>
+          <button
+            onClick={exportQuotesToCsv}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 text-sm font-medium bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl transition-colors"
+            title="Exporter en CSV"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            CSV
+          </button>
         </div>
 
         {stats && (

@@ -22,6 +22,10 @@ export interface InvoiceCompany {
   capital?: number;
   legalMentions?: string;
   defaultConditions?: string;
+  /** Pre-formatted header block from company settings (shown verbatim in left column) */
+  headerText?: string;
+  /** Pre-formatted footer block from company settings (shown verbatim in footer) */
+  footerText?: string;
 }
 
 export interface InvoiceCustomer {
@@ -117,14 +121,45 @@ export default function InvoicePreview({ data, asModal = false }: Props) {
       : null
   );
 
-  /* ── Legal footer ────────────────────────────────────────────────────── */
-  const legalLine = company?.legalMentions || [
-    company?.name,
-    company?.siret ? `SIRET ${company.siret}` : null,
-    company?.rcsCity ? `RCS ${company.rcsCity}` : null,
-    company?.capital ? `Capital ${company.capital.toLocaleString('fr-FR')} €` : null,
-    company?.vatNumber ? `TVA intracommunautaire : ${company.vatNumber}` : null,
-  ].filter(Boolean).join('  –  ');
+  /* ── Header text (left column) ───────────────────────────────────────── */
+  // Prefer explicit headerText from settings; fall back to auto-building from fields
+  const headerLines = company?.headerText
+    ? company.headerText.split('\n').map(l => l.trim()).filter(Boolean)
+    : [
+        company?.name,
+        company?.address,
+        [company?.postalCode, company?.city].filter(Boolean).join(' ') || null,
+        company?.phone ? `Tél : ${company.phone}` : null,
+        company?.email ?? null,
+        company?.website ?? null,
+        company?.siret ? `SIRET : ${company.siret}` : null,
+        company?.vatNumber ? `TVA : ${company.vatNumber}` : null,
+      ].filter(Boolean) as string[];
+
+  /* ── Footer text (bottom band) ────────────────────────────────────────── */
+  // Prefer explicit footerText from settings; fall back to auto-building from fields
+  const footerLines = company?.footerText
+    ? company.footerText.split('\n').map(l => l.trim()).filter(Boolean)
+    : (() => {
+        const lines: string[] = [];
+        const line1 = [
+          company?.name,
+          company?.address,
+          [company?.postalCode, company?.city].filter(Boolean).join(' '),
+        ].filter(Boolean).join(' – ');
+        if (line1) lines.push(line1);
+        const legal = [
+          company?.siret ? `SIRET ${company.siret}` : '',
+          company?.rcsCity ? `RCS ${company.rcsCity}` : '',
+          company?.capital ? `Capital ${company.capital.toLocaleString('fr-FR')} €` : '',
+          company?.vatNumber ? `TVA : ${company.vatNumber}` : '',
+        ].filter(Boolean).join(' – ');
+        if (legal) lines.push(legal);
+        const contact = [company?.phone, company?.email, company?.website].filter(Boolean).join('  |  ');
+        if (contact) lines.push(contact);
+        if (company?.legalMentions) lines.push(company.legalMentions);
+        return lines;
+      })();
 
   /* ── Wrapper classes ─────────────────────────────────────────────────── */
   const wrapperCls = asModal
@@ -136,203 +171,273 @@ export default function InvoicePreview({ data, asModal = false }: Props) {
       {/* ── A4 page ──────────────────────────────────────────────────── */}
       <div
         id="invoice-preview"
-        className="bg-white text-gray-900 text-xs font-sans"
-        style={{ width: '210mm', minHeight: '297mm', margin: '0 auto', padding: '15mm 15mm 20mm' }}
+        className="bg-white text-gray-900 text-[11px] font-sans"
+        style={{ width: '210mm', minHeight: '297mm', margin: '0 auto', padding: '0', display: 'flex', flexDirection: 'column' }}
       >
+        {/* ════ TOP ACCENT STRIPE ═════════════════════════════════════════ */}
+        <div style={{ height: '5px', background: 'linear-gradient(90deg, #1d4ed8 0%, #3b82f6 60%, #6366f1 100%)' }} />
 
-        {/* ════ HEADER ════════════════════════════════════════════════════ */}
-        <div className="flex justify-between items-start mb-8">
-          {/* Seller */}
-          <div className="flex-1">
-            {company?.logoUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={company.logoUrl} alt="logo" className="mb-2 max-h-14 max-w-40 object-contain" />
-            )}
-            <p className="text-base font-bold">{company?.name || '—'}</p>
-            {company?.address && <p>{company.address}</p>}
-            {(company?.postalCode || company?.city) && (
-              <p>{[company.postalCode, company.city].filter(Boolean).join(' ')}</p>
-            )}
-            {company?.phone && <p>Tél : {company.phone}</p>}
-            {company?.email && <p>{company.email}</p>}
-            {company?.siret && <p className="text-gray-500">SIRET : {company.siret}</p>}
-            {company?.vatNumber && <p className="text-gray-500">TVA : {company.vatNumber}</p>}
+        {/* ════ DOCUMENT BODY ═════════════════════════════════════════════ */}
+        <div style={{ padding: '12mm 15mm 10mm', flex: 1 }}>
+
+          {/* ════ HEADER ══════════════════════════════════════════════════ */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8mm' }}>
+
+            {/* Left column – company identity */}
+            <div style={{ flex: 1, paddingRight: '8mm' }}>
+              {company?.logoUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={company.logoUrl}
+                  alt="logo"
+                  style={{ maxHeight: '48px', maxWidth: '160px', objectFit: 'contain', marginBottom: '6px', display: 'block' }}
+                />
+              )}
+              {headerLines.map((line, i) => (
+                <p
+                  key={i}
+                  style={{
+                    margin: '1px 0',
+                    fontWeight: i === 0 ? 700 : 400,
+                    fontSize: i === 0 ? '13px' : '10px',
+                    color: i === 0 ? '#111827' : i >= headerLines.length - 2 ? '#9ca3af' : '#374151',
+                  }}
+                >
+                  {line}
+                </p>
+              ))}
+            </div>
+
+            {/* Right column – invoice metadata */}
+            <div style={{ minWidth: '180px', textAlign: 'right' }}>
+              <div style={{
+                display: 'inline-block',
+                background: '#1d4ed8',
+                color: 'white',
+                padding: '6px 14px',
+                borderRadius: '6px',
+                marginBottom: '8px',
+              }}>
+                <p style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '2px', margin: 0 }}>FACTURE</p>
+              </div>
+              <p style={{ fontSize: '13px', fontWeight: 700, color: '#111827', margin: '2px 0' }}>
+                {reference || <em style={{ color: '#6b7280', fontWeight: 400 }}>Brouillon</em>}
+              </p>
+              <p style={{ fontSize: '10px', color: '#6b7280', margin: '4px 0 1px' }}>
+                Date d&apos;émission&nbsp;: <span style={{ fontWeight: 600, color: '#111827' }}>{fmtDate(invoiceDate)}</span>
+              </p>
+              <p style={{ fontSize: '10px', color: '#6b7280', margin: '1px 0' }}>
+                Date d&apos;échéance&nbsp;: <span style={{ fontWeight: 700, color: '#ef4444' }}>{fmtDate(dueDate)}</span>
+              </p>
+              {purchaseOrder && (
+                <p style={{ fontSize: '10px', color: '#6b7280', margin: '1px 0' }}>
+                  BdC client&nbsp;: <span style={{ fontWeight: 600, color: '#111827' }}>{purchaseOrder}</span>
+                </p>
+              )}
+
+              {/* Bill-to box */}
+              <div style={{
+                marginTop: '10px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                padding: '8px 10px',
+                textAlign: 'left',
+                background: '#f9fafb',
+              }}>
+                <p style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#9ca3af', margin: '0 0 4px' }}>
+                  Destinataire
+                </p>
+                <p style={{ fontWeight: 700, fontSize: '11px', color: '#111827', margin: '0 0 2px' }}>{customer?.name || '—'}</p>
+                {customer?.contactName && <p style={{ fontSize: '10px', color: '#374151', margin: '1px 0' }}>{customer.contactName}</p>}
+                {customer?.address && (
+                  <p style={{ fontSize: '10px', color: '#6b7280', margin: '1px 0', whiteSpace: 'pre-line' }}>{customer.address}</p>
+                )}
+                {customer?.email && <p style={{ fontSize: '10px', color: '#6b7280', margin: '1px 0' }}>{customer.email}</p>}
+                {customer?.phone && <p style={{ fontSize: '10px', color: '#6b7280', margin: '1px 0' }}>{customer.phone}</p>}
+                {(customer?.vat || customer?.siret) && (
+                  <p style={{ fontSize: '9px', color: '#9ca3af', margin: '3px 0 0' }}>
+                    {[customer.siret && `SIRET ${customer.siret}`, customer.vat && `TVA ${customer.vat}`].filter(Boolean).join('  –  ')}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* Invoice title */}
-          <div className="text-right">
-            <h1 className="text-2xl font-bold text-blue-700 tracking-wide">FACTURE</h1>
-            <p className="text-lg font-semibold mt-1">{reference || 'Brouillon'}</p>
-            <p className="text-gray-500 mt-2">Date : {fmtDate(invoiceDate)}</p>
-            <p className="text-gray-500">Échéance : <span className="font-medium text-gray-800">{fmtDate(dueDate)}</span></p>
-            {purchaseOrder && (
-              <p className="text-gray-500 mt-1">Réf. commande : <span className="font-medium">{purchaseOrder}</span></p>
-            )}
-          </div>
-        </div>
+          {/* Separator */}
+          <div style={{ borderTop: '2px solid #e5e7eb', marginBottom: '6mm' }} />
 
-        {/* ════ BILL-TO ════════════════════════════════════════════════════ */}
-        <div className="flex justify-end mb-8">
-          <div className="border border-gray-300 rounded p-4 min-w-[200px] max-w-[220px]">
-            <p className="text-[10px] font-semibold uppercase text-gray-400 mb-1">Destinataire</p>
-            <p className="font-bold">{customer?.name || '—'}</p>
-            {customer?.contactName && <p>{customer.contactName}</p>}
-            {customer?.address && <p className="text-gray-600 whitespace-pre-line">{customer.address}</p>}
-            {customer?.email && <p className="text-gray-500">{customer.email}</p>}
-            {customer?.phone && <p className="text-gray-500">{customer.phone}</p>}
-            {customer?.vat && <p className="text-gray-500 mt-1">TVA : {customer.vat}</p>}
-            {customer?.siret && <p className="text-gray-500">SIRET : {customer.siret}</p>}
-          </div>
-        </div>
+          {/* Description / Objet */}
+          {description && (
+            <p style={{ marginBottom: '5mm', fontWeight: 600, color: '#374151', fontSize: '11px' }}>
+              Objet&nbsp;: {description}
+            </p>
+          )}
 
-        {/* Description */}
-        {description && (
-          <p className="mb-4 text-gray-700 font-medium">Objet : {description}</p>
-        )}
-
-        {/* ════ LINE ITEMS TABLE ══════════════════════════════════════════ */}
-        <table className="w-full border-collapse text-xs mb-6">
-          <thead>
-            <tr className="bg-blue-700 text-white">
-              <th className="text-left px-2 py-2 w-[40%]">Désignation</th>
-              <th className="text-right px-2 py-2 w-[8%]">Qté</th>
-              <th className="text-left px-2 py-2 w-[6%]">Unité</th>
-              <th className="text-right px-2 py-2 w-[12%]">PU HT</th>
-              <th className="text-right px-2 py-2 w-[8%]">Remise</th>
-              <th className="text-right px-2 py-2 w-[8%]">TVA</th>
-              <th className="text-right px-2 py-2 w-[12%]">Total HT</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lineItems.length === 0 && (
-              <tr>
-                <td colSpan={7} className="text-center py-4 text-gray-400 italic">
-                  Aucune ligne
-                </td>
+          {/* ════ LINE ITEMS TABLE ══════════════════════════════════════ */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', marginBottom: '6mm' }}>
+            <thead>
+              <tr style={{ background: '#1e3a5f', color: 'white' }}>
+                <th style={{ textAlign: 'left', padding: '6px 8px', width: '39%' }}>Désignation</th>
+                <th style={{ textAlign: 'right', padding: '6px 8px', width: '8%' }}>Qté</th>
+                <th style={{ textAlign: 'left', padding: '6px 8px', width: '6%' }}>Unité</th>
+                <th style={{ textAlign: 'right', padding: '6px 8px', width: '12%' }}>PU HT</th>
+                <th style={{ textAlign: 'right', padding: '6px 8px', width: '8%' }}>Remise</th>
+                <th style={{ textAlign: 'right', padding: '6px 8px', width: '7%' }}>TVA</th>
+                <th style={{ textAlign: 'right', padding: '6px 8px', width: '12%' }}>Total HT</th>
               </tr>
-            )}
-            {lineItems.map((item, idx) => {
-              if (item.item_type === 'page_break') {
-                return (
-                  <tr key={idx}>
-                    <td colSpan={7} className="py-1">
-                      <div className="border-t border-dashed border-gray-300" />
-                    </td>
-                  </tr>
-                );
-              }
-              if (item.item_type === 'section') {
-                return (
-                  <tr key={idx} className="bg-gray-100">
-                    <td colSpan={7} className="px-2 py-1 font-bold uppercase text-[10px] tracking-wide text-blue-800">
-                      {item.description}
-                    </td>
-                  </tr>
-                );
-              }
-              if (item.item_type === 'text') {
-                return (
-                  <tr key={idx}>
-                    <td colSpan={7} className="px-2 py-1 italic text-gray-600">
-                      {item.description}
-                    </td>
-                  </tr>
-                );
-              }
-
-              const base = item.quantity * item.unit_price;
-              const lineDisc = item.discount_percent ? base * item.discount_percent / 100 : 0;
-              const lineHt = base - lineDisc;
-
-              return (
-                <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className="px-2 py-1.5 align-top">
-                    <p className="font-medium">{item.description || '—'}</p>
-                    {item.long_description && (
-                      <p className="text-gray-500 text-[10px] whitespace-pre-wrap mt-0.5">{item.long_description}</p>
-                    )}
-                    {item.reference && (
-                      <p className="text-gray-400 text-[9px]">Réf : {item.reference}</p>
-                    )}
+            </thead>
+            <tbody>
+              {lineItems.length === 0 && (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '16px', color: '#9ca3af', fontStyle: 'italic' }}>
+                    Aucune ligne
                   </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">{item.quantity}</td>
-                  <td className="px-2 py-1.5">{item.unit || 'u'}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">{fmt(item.unit_price)}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums text-gray-500">
-                    {item.discount_percent ? `${item.discount_percent}%` : '—'}
-                  </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">{item.vat_rate}%</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums font-medium">{fmt(lineHt)}</td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              )}
+              {lineItems.map((item, idx) => {
+                if (item.item_type === 'page_break') {
+                  return (
+                    <tr key={idx}>
+                      <td colSpan={7} style={{ padding: '4px 0' }}>
+                        <div style={{ borderTop: '1px dashed #d1d5db' }} />
+                      </td>
+                    </tr>
+                  );
+                }
+                if (item.item_type === 'section') {
+                  return (
+                    <tr key={idx} style={{ background: '#eff6ff' }}>
+                      <td colSpan={7} style={{ padding: '5px 8px', fontWeight: 700, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#1d4ed8', borderLeft: '3px solid #3b82f6' }}>
+                        {item.description}
+                      </td>
+                    </tr>
+                  );
+                }
+                if (item.item_type === 'text') {
+                  return (
+                    <tr key={idx}>
+                      <td colSpan={7} style={{ padding: '4px 8px', fontStyle: 'italic', color: '#6b7280' }}>
+                        {item.description}
+                      </td>
+                    </tr>
+                  );
+                }
 
-        {/* ════ TOTALS ════════════════════════════════════════════════════ */}
-        <div className="flex justify-end mb-6">
-          <div className="min-w-[260px] space-y-1">
-            <div className="flex justify-between py-0.5">
-              <span className="text-gray-600">Total HT brut</span>
-              <span className="tabular-nums">{fmt(rawHt)}</span>
-            </div>
+                const base = item.quantity * item.unit_price;
+                const lineDisc = item.discount_percent ? base * item.discount_percent / 100 : 0;
+                const lineHt = base - lineDisc;
+                const rowBg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
 
-            {discountPercent > 0 && (
-              <div className="flex justify-between py-0.5 text-green-700">
-                <span>Remise globale ({discountPercent}%)</span>
-                <span className="tabular-nums">- {fmt(globalDiscountAmt)}</span>
+                return (
+                  <tr key={idx} style={{ background: rowBg }}>
+                    <td style={{ padding: '5px 8px', verticalAlign: 'top', borderBottom: '1px solid #f1f5f9' }}>
+                      <p style={{ fontWeight: 600, margin: 0 }}>{item.description || '—'}</p>
+                      {item.long_description && (
+                        <p style={{ color: '#6b7280', fontSize: '9px', whiteSpace: 'pre-wrap', margin: '2px 0 0' }}>{item.long_description}</p>
+                      )}
+                      {item.reference && (
+                        <p style={{ color: '#9ca3af', fontSize: '8px', margin: '1px 0 0' }}>Réf : {item.reference}</p>
+                      )}
+                    </td>
+                    <td style={{ padding: '5px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderBottom: '1px solid #f1f5f9' }}>{item.quantity}</td>
+                    <td style={{ padding: '5px 8px', borderBottom: '1px solid #f1f5f9' }}>{item.unit || 'u'}</td>
+                    <td style={{ padding: '5px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', borderBottom: '1px solid #f1f5f9' }}>{fmt(item.unit_price)}</td>
+                    <td style={{ padding: '5px 8px', textAlign: 'right', color: '#6b7280', borderBottom: '1px solid #f1f5f9' }}>
+                      {item.discount_percent ? `${item.discount_percent}%` : '—'}
+                    </td>
+                    <td style={{ padding: '5px 8px', textAlign: 'right', borderBottom: '1px solid #f1f5f9' }}>{item.vat_rate}%</td>
+                    <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums', borderBottom: '1px solid #f1f5f9' }}>{fmt(lineHt)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {/* ════ TOTALS ════════════════════════════════════════════════ */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '6mm' }}>
+            <div style={{ minWidth: '240px', fontSize: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                <span style={{ color: '#6b7280' }}>Total HT brut</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(rawHt)}</span>
               </div>
-            )}
 
-            <div className="flex justify-between py-0.5 font-medium">
-              <span>Total HT net</span>
-              <span className="tabular-nums">{fmt(totalHt)}</span>
-            </div>
+              {discountPercent > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', color: '#16a34a' }}>
+                  <span>Remise globale ({discountPercent}%)</span>
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>- {fmt(globalDiscountAmt)}</span>
+                </div>
+              )}
 
-            <div className="border-t border-gray-200 my-1" />
-
-            {/* TVA breakdown by rate */}
-            {Object.entries(vatBreakdown).sort(([a], [b]) => +b - +a).map(([rate, vals]) => (
-              <div key={rate} className="flex justify-between py-0.5 text-gray-600">
-                <span>TVA {rate}%</span>
-                <span className="tabular-nums">+ {fmt(vals.tva)}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontWeight: 600 }}>
+                <span>Total HT net</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(totalHt)}</span>
               </div>
+
+              <div style={{ borderTop: '1px solid #e5e7eb', margin: '4px 0' }} />
+
+              {Object.entries(vatBreakdown).sort(([a], [b]) => +b - +a).map(([rate, vals]) => (
+                <div key={rate} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#6b7280' }}>
+                  <span>TVA {rate}%</span>
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>+ {fmt(vals.tva)}</span>
+                </div>
+              ))}
+
+              <div style={{ borderTop: '2.5px solid #1e3a5f', margin: '5px 0' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0 2px', fontWeight: 800, fontSize: '12px', color: '#1d4ed8' }}>
+                <span>TOTAL TTC</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(totalTtc)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ════ BANK / VIREMENT ═══════════════════════════════════════ */}
+          {bankInfo && (
+            <div style={{ border: '1px solid #dbeafe', borderRadius: '6px', padding: '8px 12px', marginBottom: '5mm', background: '#eff6ff' }}>
+              <p style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#3b82f6', margin: '0 0 4px' }}>
+                Règlement par virement bancaire
+              </p>
+              <p style={{ whiteSpace: 'pre-line', color: '#1e3a5f', margin: 0, fontWeight: 500 }}>{bankInfo}</p>
+            </div>
+          )}
+
+          {/* Notes */}
+          {notes && (
+            <div style={{ marginBottom: '5mm' }}>
+              <p style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#9ca3af', margin: '0 0 3px' }}>Notes</p>
+              <p style={{ whiteSpace: 'pre-line', color: '#374151', margin: 0 }}>{notes}</p>
+            </div>
+          )}
+
+          {/* ════ CONDITIONS DE PAIEMENT ════════════════════════════════ */}
+          {paymentConditions && (
+            <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '5mm', marginTop: '3mm' }}>
+              <p style={{ fontSize: '8px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#9ca3af', margin: '0 0 3px' }}>
+                Conditions de paiement
+              </p>
+              <p style={{ fontSize: '8px', color: '#6b7280', whiteSpace: 'pre-line', lineHeight: 1.5, margin: 0 }}>{paymentConditions}</p>
+            </div>
+          )}
+
+        </div>{/* end body padding */}
+
+        {/* ════ FOOTER BAND ═══════════════════════════════════════════════ */}
+        {footerLines.length > 0 && (
+          <div style={{
+            borderTop: '1px solid #e5e7eb',
+            padding: '5mm 15mm 4mm',
+            background: '#f8fafc',
+          }}>
+            {footerLines.map((line, i) => (
+              <p key={i} style={{
+                fontSize: i === 0 ? '8.5px' : '7.5px',
+                color: i === 0 ? '#374151' : '#9ca3af',
+                textAlign: 'center',
+                margin: '1px 0',
+                fontWeight: i === 0 ? 500 : 400,
+              }}>
+                {line}
+              </p>
             ))}
-
-            <div className="border-t-2 border-gray-800 my-1" />
-            <div className="flex justify-between py-1 font-bold text-base">
-              <span>TOTAL TTC</span>
-              <span className="tabular-nums">{fmt(totalTtc)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* ════ PAYMENT & BANK ════════════════════════════════════════════ */}
-        {bankInfo && (
-          <div className="border border-gray-200 rounded p-3 mb-4 bg-gray-50">
-            <p className="text-[10px] font-semibold uppercase text-gray-400 mb-1">Règlement par virement</p>
-            <p className="whitespace-pre-line text-gray-700">{bankInfo}</p>
-          </div>
-        )}
-
-        {/* Notes */}
-        {notes && (
-          <div className="mb-4">
-            <p className="text-[10px] font-semibold uppercase text-gray-400 mb-1">Notes</p>
-            <p className="whitespace-pre-line text-gray-700">{notes}</p>
-          </div>
-        )}
-
-        {/* ════ CONDITIONS & LEGAL MENTIONS ══════════════════════════════ */}
-        <div className="border-t border-gray-200 pt-3 mt-4">
-          <p className="text-[9px] font-semibold uppercase text-gray-400 mb-1">Conditions de paiement</p>
-          <p className="text-[9px] text-gray-600 whitespace-pre-line leading-relaxed">{paymentConditions}</p>
-        </div>
-
-        {/* ════ FOOTER ════════════════════════════════════════════════════ */}
-        {legalLine && (
-          <div className="mt-auto pt-6 border-t border-gray-100">
-            <p className="text-[8px] text-gray-400 text-center">{legalLine}</p>
           </div>
         )}
       </div>

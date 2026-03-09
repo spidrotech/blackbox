@@ -34,11 +34,16 @@ export interface DocumentCompany {
   logoUrl?: string;
   iban?: string;
   bic?: string;
+  bankName?: string;
   rcsCity?: string;
   capital?: number;
   legalMentions?: string;
   defaultConditions?: string;
   defaultPaymentTerms?: string;
+  /** Pre-formatted header text from company settings (used verbatim in PDF header) */
+  headerText?: string;
+  /** Pre-formatted footer text from company settings (used verbatim in PDF footer) */
+  footerText?: string;
 }
 
 export interface DocumentDefaults {
@@ -71,6 +76,8 @@ export const mapCompanySettingsToDocumentCompany = (
     legalMentions: company.legal_mentions,
     defaultConditions: company.default_conditions,
     defaultPaymentTerms: company.default_payment_terms,
+    headerText: company.header_text,
+    footerText: company.footer_text,
   };
 };
 

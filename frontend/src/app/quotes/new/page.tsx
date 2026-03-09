@@ -1,26 +1,23 @@
 ﻿'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { MainLayout } from '@/components/layout';
-import { Card, CardContent, CardHeader, CardTitle, Button, Input, Select, Modal } from '@/components/ui';
-import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
+import { Button, Modal } from '@/components/ui';
 import { CustomerSelector } from '@/components/customers/CustomerSelector';
 import { NewCustomerForm } from '@/components/customers/NewCustomerForm';
-import { quoteService, customerService, projectService, priceLibraryService, settingsService } from '@/services/api';
-import { QuoteCreate, Customer, Project, PriceLibraryItem, LineItem, LineItemType } from '@/types';
+import { quoteService, customerService, projectService, settingsService } from '@/services/api';
+import { QuoteCreate, Customer, Project, LineItem, LineItemType } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { LineItemsEditor, LineItemData } from '@/components/quotes/LineItemsEditor';
-import { PdfSettingsCard } from '@/components/documents/PdfSettingsCard';
 import {
   CompanySettingsData,
   getDocumentDefaultsFromCompany,
 } from '@/lib/company-settings';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import Link from 'next/link';
 
 const toLineItemType = (itemType: LineItemData['item_type']): LineItemType => {
-  if (itemType === 'supply' || itemType === 'labor' || itemType === 'other') {
-    return itemType;
-  }
+  if (itemType === 'supply' || itemType === 'labor' || itemType === 'other') return itemType;
   return 'other';
 };
 
@@ -39,20 +36,24 @@ const toQuoteLineItem = (item: LineItemData, position: number): LineItem => ({
   position,
 });
 
-
 export default function NewQuotePage() {
   const router = useRouter();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftHydratedRef = useRef(false);
+
+  const [activeTab, setActiveTab] = useState<'edition' | 'preview'>('edition');
   const [loading, setLoading] = useState(false);
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
-  const [showFullPdfPreview, setShowFullPdfPreview] = useState(false);
+  const [showDescription, setShowDescription] = useState(false);
+  const [showDiscount, setShowDiscount] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [priceLibrary, setPriceLibrary] = useState<PriceLibraryItem[]>([]);
-  const [priceSearch, setPriceSearch] = useState('');
   const [companySettings, setCompanySettings] = useState<CompanySettingsData | null>(null);
+  const [draftMessage, setDraftMessage] = useState('');
+  const [durationQty, setDurationQty] = useState('');
+  const [durationUnit, setDurationUnit] = useState('Jour');
 
   const [formData, setFormData] = useState<QuoteCreate>({
     customer_id: 0,
@@ -64,7 +65,7 @@ export default function NewQuotePage() {
     conditions: '',
     payment_terms: '',
     validity_days: 30,
-    deposit_percent: 30,
+    deposit_percent: 40,
     discount_percent: 0,
     cee_premium: 0,
     mpr_premium: 0,
@@ -76,30 +77,15 @@ export default function NewQuotePage() {
   });
 
   const [lineItems, setLineItems] = useState<LineItemData[]>([]);
+  const QUOTE_DRAFT_KEY = 'blackbox.quote.create.draft.v2';
+  const { confirmIfDirty, captureBaseline } = useUnsavedChanges({ formData, lineItems });
 
-  const addFromLibrary = (item: PriceLibraryItem) => {
-    const details = [
-      item.description,
-      item.long_description,
-      item.brand ? `Marque : ${item.brand}` : undefined,
-    ].filter(Boolean).join('\n');
-
-    setLineItems(prev => [...prev, {
-      description: item.name || item.description || '',
-      long_description: details || undefined,
-      item_type: item.item_type || 'supply',
-      quantity: 1,
-      unit: item.unit || 'u',
-      unit_price: item.unit_price || 0,
-      vat_rate: item.tax_rate || 20,
-      reference: item.reference,
-    }]);
-    priceLibraryService.recordUsage(item.id);
+  const clearDraft = () => {
+    localStorage.removeItem(QUOTE_DRAFT_KEY);
+    setDraftMessage('Brouillon supprime.');
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   useEffect(() => {
     if (!formData.customer_id || lineItems.length === 0) return;
@@ -110,39 +96,61 @@ export default function NewQuotePage() {
   }, [formData, lineItems]);
 
   const loadData = async () => {
+    let baseline = { formData, lineItems };
     try {
-      const [customersRes, projectsRes, priceRes, companyRes] = await Promise.all([
+      const [customersRes, projectsRes, companyRes] = await Promise.all([
         customerService.getAll(),
         projectService.getAll(),
-        priceLibraryService.getAll(),
         settingsService.getCompany(),
       ]);
       if (customersRes.success) setCustomers(Array.isArray(customersRes.data) ? customersRes.data : []);
       if (projectsRes.success) setProjects(Array.isArray(projectsRes.data) ? projectsRes.data : []);
-      if (priceRes.success) setPriceLibrary(Array.isArray(priceRes.data) ? priceRes.data : []);
       if (companyRes.success && companyRes.data) {
         const companyData = companyRes.data as CompanySettingsData;
         setCompanySettings(companyData);
         const defaults = getDocumentDefaultsFromCompany(companyData);
-        setFormData(prev => ({
-          ...prev,
-          conditions: prev.conditions || defaults.conditions,
-          terms_and_conditions: prev.terms_and_conditions || defaults.conditions,
-          payment_terms: prev.payment_terms || defaults.paymentTerms,
-          bank_details: prev.bank_details || defaults.bankDetails,
-          legal_mentions: prev.legal_mentions || defaults.legalMentions,
-          footer_notes: prev.footer_notes || defaults.footerNotes,
-        }));
+        const baseData = {
+          ...formData,
+          conditions: formData.conditions || defaults.conditions,
+          terms_and_conditions: formData.terms_and_conditions || defaults.conditions,
+          payment_terms: formData.payment_terms || defaults.paymentTerms,
+          bank_details: formData.bank_details || defaults.bankDetails,
+          legal_mentions: formData.legal_mentions || defaults.legalMentions,
+          footer_notes: formData.footer_notes || defaults.footerNotes,
+        };
+        const savedDraft = localStorage.getItem(QUOTE_DRAFT_KEY);
+        if (savedDraft) {
+          try {
+            const parsed = JSON.parse(savedDraft) as { formData?: QuoteCreate; lineItems?: LineItemData[] };
+            const restoredFormData = { ...baseData, ...(parsed.formData || {}) };
+            const restoredLineItems = Array.isArray(parsed.lineItems) ? parsed.lineItems : [];
+            setFormData(restoredFormData);
+            setLineItems(restoredLineItems);
+            baseline = { formData: restoredFormData, lineItems: restoredLineItems };
+            setDraftMessage('Brouillon restaure.');
+          } catch {
+            setFormData(baseData);
+            baseline = { formData: baseData, lineItems: [] };
+          }
+        } else {
+          setFormData(baseData);
+          baseline = { formData: baseData, lineItems: [] };
+        }
       }
-    } catch (error) {
-      console.error('Error loading data:', error);
-    }
+    } catch (error) { console.error('Error loading data:', error); }
+    finally { captureBaseline(baseline); draftHydratedRef.current = true; }
   };
 
-  const projectOptions = [
-    { value: '', label: 'Aucun projet' },
-    ...projects.map(p => ({ value: String(p.id), label: p.name })),
-  ];
+  useEffect(() => {
+    if (!draftHydratedRef.current) return;
+    const hasMeaningfulData = Boolean(formData.customer_id || (formData.subject || '').trim() || lineItems.length > 0);
+    if (!hasMeaningfulData) return;
+    const timeout = setTimeout(() => {
+      localStorage.setItem(QUOTE_DRAFT_KEY, JSON.stringify({ formData, lineItems, updatedAt: new Date().toISOString() }));
+      setDraftMessage('Brouillon enregistre.');
+    }, 500);
+    return () => clearTimeout(timeout);
+  }, [formData, lineItems]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -154,7 +162,6 @@ export default function NewQuotePage() {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
   };
-
 
   const calculateTotals = () => {
     let totalHT = 0; let totalTVA = 0;
@@ -197,13 +204,12 @@ export default function NewQuotePage() {
     finally { setPdfLoading(false); }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!formData.customer_id) { alert('Veuillez selectionner un client'); return; }
     if (lineItems.length === 0) { alert('Veuillez ajouter au moins une ligne'); return; }
     setLoading(true);
     try {
-      // Sanitize: strip empty strings for Optional[date] fields
       const payload: QuoteCreate = {
         ...formData,
         line_items: lineItems.map((item, i) => toQuoteLineItem(item, i)),
@@ -216,373 +222,697 @@ export default function NewQuotePage() {
         waste_management_fee: (formData.waste_management_fee && formData.waste_management_fee > 0) ? formData.waste_management_fee : undefined,
       };
       const response = await quoteService.create(payload);
-      if (response.success) router.push('/quotes');
+      if (response.success) {
+        localStorage.removeItem(QUOTE_DRAFT_KEY);
+        captureBaseline({ formData, lineItems });
+        router.push('/quotes');
+      }
     } catch (error) { console.error('Error creating quote:', error); }
     finally { setLoading(false); }
   };
 
+  const projectOptions = [
+    { value: '', label: 'Selectionner un chantier' },
+    ...projects.map(p => ({ value: String(p.id), label: p.name })),
+  ];
+
   const totals = calculateTotals();
-  const allSections = [...new Set(lineItems.map(i => i.section).filter(Boolean))];
-  const filteredPriceLibrary = useMemo(() => {
-    const query = priceSearch.trim().toLowerCase();
-    const source = [...priceLibrary].sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0));
-    if (!query) return source.slice(0, 12);
-    return source.filter((item) =>
-      [item.name, item.reference, item.description, item.long_description, item.brand]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query))
-    ).slice(0, 12);
-  }, [priceLibrary, priceSearch]);
+  const today = new Date().toLocaleDateString('fr-FR');
+  const expiryDate = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + (formData.validity_days || 30));
+    return d.toLocaleDateString('fr-FR');
+  })();
+  const bankLine = companySettings?.iban
+    ? `IBAN ${companySettings.iban}${companySettings.bic ? `\nBIC ${companySettings.bic}` : ''}${companySettings.bic_intermediaire ? `  BIC intermediaire ${companySettings.bic_intermediaire}` : ''}`
+    : formData.bank_details || '';
 
   return (
-    <MainLayout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 pb-8">
+    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
 
-        {/* Header sticky */}
-        <div className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-20 shadow-sm">
-          <div className="max-w-[1400px] mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button type="button" onClick={() => router.push('/quotes')} className="text-slate-400 hover:text-slate-600">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <div>
-                <h1 className="text-xl font-bold text-slate-900">Nouveau devis</h1>
-                <p className="text-xs text-slate-500">Previsualisation PDF en temps reel</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => router.push('/quotes')}>Annuler</Button>
-              <Button type="button" size="sm" variant="outline" onClick={generatePdfPreview} loading={pdfLoading} className="gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-                Apercu PDF
-              </Button>
-              <Button type="submit" form="quote-form" loading={loading} size="sm" className="gap-2">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Enregistrer le devis
-              </Button>
-            </div>
+      {/* ─── TOP BAR ──────────────────────────────────────────────────── */}
+      <div className="flex-none bg-white border-b border-gray-200 z-40">
+        <div className="flex items-center h-14 px-4 gap-2">
+
+          {/* Back + title */}
+          <button
+            type="button"
+            onClick={() => { if (confirmIfDirty()) router.push('/quotes'); }}
+            className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 hover:text-gray-900 mr-2 shrink-0"
+          >
+            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Nouveau devis
+          </button>
+
+          {/* Tabs */}
+          <div className="flex flex-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab('edition')}
+              className={`flex items-center gap-1.5 px-4 h-14 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'edition'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Edition
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveTab('preview'); generatePdfPreview(); }}
+              className={`flex items-center gap-1.5 px-4 h-14 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'preview'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              Previsualisation
+            </button>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2 shrink-0">
+            {draftMessage && (
+              <span className="text-xs text-gray-400 hidden md:block">{draftMessage}</span>
+            )}
+            <button
+              type="button"
+              onClick={() => { if (confirmIfDirty()) router.push('/quotes'); }}
+              className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSubmit()}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {loading
+                ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+              }
+              Enregistrer
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSubmit()}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors disabled:opacity-50"
+            >
+              Finaliser et envoyer
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => { if (confirmIfDirty()) router.push('/quotes'); }}
+              className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Fermer"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
+      </div>
 
-        <div className="max-w-[1400px] mx-auto px-6 py-6">
-          <div className="mb-6">
-            <PdfSettingsCard company={companySettings} documentLabel="devis" />
-          </div>
+      {/* ─── CONTENT ──────────────────────────────────────────────────── */}
 
-          <form id="quote-form" onSubmit={handleSubmit}>
-            <div className="grid gap-6" style={{ gridTemplateColumns: '1fr 420px' }}>
+      {activeTab === 'edition' ? (
+        /* ═══ EDITION MODE ══════════════════════════════════════════════ */
+        <div className="flex-1 overflow-y-auto bg-gray-100">
+          <div className="max-w-5xl mx-auto py-6 px-4">
+            <form id="quote-form" onSubmit={handleSubmit}>
 
-              {/* COLONNE GAUCHE */}
-              <div className="space-y-5">
+              {/* White document panel */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
 
-                {/* 1. Client & Projet */}
-                <Card>
-                  <CardHeader><CardTitle className="text-base flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">1</span>
-                    Client et Projet
-                  </CardTitle></CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <CustomerSelector label="Client *" customers={customers} value={formData.customer_id}
+                {/* ── DOCUMENT HEADER ─────────────────────────────────── */}
+                <div className="px-8 pt-6 pb-5 border-b border-gray-100">
+                  <div className="flex items-start justify-between gap-6">
+
+                    {/* Left: quote metadata */}
+                    <div className="flex-1">
+                      <p className="text-lg font-bold text-gray-900 mb-1">Nouveau devis</p>
+                      <p className="text-sm text-gray-500">En date du {today}</p>
+                      <p className="text-sm text-gray-500">Valable jusqu&apos;au {expiryDate}</p>
+                      <div className="flex items-center gap-4 mt-2.5 flex-wrap">
+                        <div>
+                          <span className="text-xs text-gray-400">Debut des travaux&nbsp;</span>
+                          <input
+                            type="date"
+                            name="work_start_date"
+                            value={formData.work_start_date || ''}
+                            onChange={handleChange}
+                            className="text-sm text-blue-600 border-0 border-b border-dashed border-blue-300 focus:outline-none focus:border-blue-500 bg-transparent"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <span className="text-xs text-gray-400">Adresse chantier&nbsp;</span>
+                          <input
+                            type="text"
+                            name="worksite_address"
+                            value={formData.worksite_address || ''}
+                            onChange={handleChange}
+                            placeholder="Adresse du chantier"
+                            className="text-sm text-blue-600 border-0 border-b border-dashed border-blue-300 focus:outline-none focus:border-blue-500 bg-transparent w-56"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-gray-400">Dur&eacute;e estim&eacute;e&nbsp;</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={durationQty}
+                            onChange={e => {
+                              setDurationQty(e.target.value);
+                              setFormData(prev => ({ ...prev, estimated_duration: e.target.value ? `${e.target.value} ${durationUnit}` : '' }));
+                            }}
+                            placeholder="—"
+                            className="text-sm text-blue-600 border-0 border-b border-dashed border-blue-300 focus:outline-none focus:border-blue-500 bg-transparent w-10 text-center"
+                          />
+                          <select
+                            value={durationUnit}
+                            onChange={e => {
+                              setDurationUnit(e.target.value);
+                              setFormData(prev => ({ ...prev, estimated_duration: durationQty ? `${durationQty} ${e.target.value}` : '' }));
+                            }}
+                            className="text-sm text-blue-600 border-0 border-b border-dashed border-blue-300 focus:outline-none bg-transparent"
+                          >
+                            {['Heure', 'Jour', 'Semaine', 'Mois', 'Ann\u00e9e'].map(u => <option key={u}>{u}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: client + chantier */}
+                    <div className="w-72 space-y-2 shrink-0">
+                      <CustomerSelector
+                        label=""
+                        customers={customers}
+                        value={formData.customer_id}
                         onChange={(id) => setFormData(prev => ({ ...prev, customer_id: id }))}
-                        onNewCustomer={() => setShowNewCustomerModal(true)} required />
-                      <Select label="Projet associe" name="project_id" options={projectOptions}
-                        value={formData.project_id?.toString() || ''} onChange={handleChange} />
+                        onNewCustomer={() => setShowNewCustomerModal(true)}
+                        required
+                      />
+                      <select
+                        name="project_id"
+                        value={formData.project_id?.toString() || ''}
+                        onChange={handleChange}
+                        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        {projectOptions.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
                     </div>
-                    <Input label="Objet du devis" name="subject" value={formData.subject || ''} onChange={handleChange}
-                      placeholder="Ex : Renovation salle de bain - Lot plomberie" />
-                  </CardContent>
-                </Card>
+                  </div>
 
-                {/* 2. Dates & Conditions */}
-                <Card>
-                  <CardHeader><CardTitle className="text-base flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">2</span>
-                    Dates et Conditions
-                  </CardTitle></CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-3 gap-4">
-                      <Input label="Validite (jours)" name="validity_days" type="number"
-                        value={formData.validity_days || ''} onChange={handleChange} placeholder="30" />
-                      <Input label="Acompte a la commande (%)" name="deposit_percent" type="number" step="0.1"
-                        value={formData.deposit_percent || ''} onChange={handleChange} />
-                      <Input label="Remise globale (%)" name="discount_percent" type="number" step="0.1"
-                        value={formData.discount_percent || ''} onChange={handleChange} />
-                    </div>
-                    <Input label="Conditions de reglement" name="payment_terms"
-                      value={formData.payment_terms || ''} onChange={handleChange}
-                      placeholder="Ex : Virement bancaire a 30 jours" />
-                  </CardContent>
-                </Card>
-
-                {/* 3. Chantier */}
-                <Card>
-                  <CardHeader><CardTitle className="text-base flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">3</span>
-                    Lieu des travaux
-                  </CardTitle></CardHeader>
-                  <CardContent className="space-y-4">
-                    <AddressAutocomplete
-                      label="Adresse du chantier"
-                      value={formData.worksite_address || ''}
-                      onChange={v => setFormData(prev => ({ ...prev, worksite_address: v }))}
-                      onSelect={r => setFormData(prev => ({ ...prev, worksite_address: `${r.street}, ${r.postalCode} ${r.city}` }))}
-                      placeholder="Ex : 12 rue de la Paix, 75001 Paris"
+                  {/* Subject + description */}
+                  <div className="mt-4 space-y-2">
+                    <input
+                      type="text"
+                      name="subject"
+                      value={formData.subject || ''}
+                      onChange={handleChange}
+                      placeholder="Objet du devis (ex : Renovation salle de bain - Lot plomberie)"
+                      className="w-full text-sm font-medium text-gray-700 border-0 border-b border-dashed border-gray-200 focus:outline-none focus:border-blue-400 bg-transparent py-1 placeholder:font-normal placeholder:text-gray-300"
                     />
-                    <div className="grid grid-cols-2 gap-4">
-                      <Input label="Date de debut des travaux" name="work_start_date" type="date"
-                        value={formData.work_start_date || ''} onChange={handleChange} />
-                      <Input label="Duree estimee" name="estimated_duration"
-                        value={formData.estimated_duration || ''} onChange={handleChange} placeholder="Ex : 2 semaines" />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* 4. Lignes */}
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">4</span>
-                        Lignes du devis
-                      </CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {priceLibrary.length > 0 && (
-                      <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                        <p className="text-xs font-semibold text-amber-800 mb-2">Bibliothèque de prix</p>
-                        <input
-                          type="text"
-                          value={priceSearch}
-                          onChange={(e) => setPriceSearch(e.target.value)}
-                          placeholder="Rechercher BAR-TH-171, PAC, marque..."
-                          className="w-full mb-2 rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                        />
-                        <div className="flex flex-wrap gap-1.5">
-                          {filteredPriceLibrary.map(item => (
-                            <button key={item.id} type="button" onClick={() => addFromLibrary(item)}
-                              className="px-2.5 py-1 text-xs bg-white border border-amber-200 rounded-full hover:bg-amber-100 transition-colors">
-                              {item.reference ? `${item.reference} — ` : ''}{item.name}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+                    {!showDescription ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowDescription(true)}
+                        className="flex items-center gap-1 text-sm text-blue-500 hover:text-blue-700"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Ajouter une description
+                      </button>
+                    ) : (
+                      <textarea
+                        name="description"
+                        rows={2}
+                        value={formData.description || ''}
+                        onChange={handleChange}
+                        placeholder="Description du chantier ou precisions..."
+                        className="w-full text-sm text-gray-600 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        autoFocus
+                      />
                     )}
-                    <LineItemsEditor
-                      items={lineItems}
-                      onChange={setLineItems}
-                    />
-                  </CardContent>
-                </Card>
-                {/* 5. Primes */}
-                <Card>
-                  <CardHeader><CardTitle className="text-base flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">5</span>
-                    Primes et Frais annexes
-                  </CardTitle></CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-xs font-medium text-slate-600 mb-1">Prime CEE (EUR)</label>
-                        <input type="number" step="0.01" name="cee_premium"
-                          value={formData.cee_premium || ''} onChange={handleChange} placeholder="0"
-                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right" />
-                        <p className="text-xs text-slate-400 mt-0.5">Deduite du net a payer</p>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-slate-600 mb-1">Aide MaPrimeRenov (EUR)</label>
-                        <input type="number" step="0.01" name="mpr_premium"
-                          value={formData.mpr_premium || ''} onChange={handleChange} placeholder="0"
-                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-slate-600 mb-1">Frais dechetterie (EUR)</label>
-                        <input type="number" step="0.01" name="waste_management_fee"
-                          value={formData.waste_management_fee || ''} onChange={handleChange} placeholder="0"
-                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 text-right" />
-                        <p className="text-xs text-slate-400 mt-0.5">Ajoute au TTC</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
 
-                {/* 6. Notes */}
-                <Card>
-                  <CardHeader><CardTitle className="text-base flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-xs font-bold">6</span>
-                    Contenu visible sur le PDF
-                  </CardTitle></CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">Notes / message au client</label>
-                      <textarea name="notes" rows={3}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                        value={formData.notes || ''} onChange={handleChange}
-                        placeholder="Remarques, precisions techniques, etc." />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">Conditions generales de vente</label>
-                      <textarea name="conditions" rows={4}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                        value={formData.conditions || ''} onChange={handleChange}
-                        placeholder="CGV apparaissant sur le devis PDF..." />
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                      Le pied de page, les mentions légales et les coordonnées bancaires sont pilotés depuis les
-                      paramètres PDF pour éviter les doubles saisies.
-                    </div>
-                  </CardContent>
-                </Card>
+                {/* ── LINE ITEMS ──────────────────────────────────────── */}
+                <div className="px-4 py-4">
+                  <LineItemsEditor items={lineItems} onChange={setLineItems} />
+                </div>
 
-              </div>
+                {/* Adjustment link */}
+                <div className="px-8 pb-3 flex justify-end">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-sm text-blue-500 hover:text-blue-700"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Definir un ajustement
+                  </button>
+                </div>
 
-              {/* COLONNE DROITE */}
-              <div className="space-y-5">
+                {/* ── PAYMENT CONDITIONS + TOTALS ─────────────────────── */}
+                <div className="px-8 py-5 border-t border-gray-100">
+                  <div className="grid grid-cols-3 gap-8">
 
-                {/* Recap totaux sticky */}
-                <Card className="sticky top-24">
-                  <CardHeader><CardTitle className="text-base">Recapitulatif</CardTitle></CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between py-1.5 border-b border-slate-100">
-                        <span className="text-slate-500">Sous-total HT brut</span>
-                        <span className="font-medium text-slate-800">{formatCurrency(totals.totalHT)}</span>
+                    {/* Left 2/3 – payment conditions */}
+                    <div className="col-span-2 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-semibold text-gray-800">Conditions de paiement</h3>
+                        <button
+                          type="button"
+                          className="flex items-center gap-0.5 text-xs text-blue-500 hover:text-blue-700"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          Ajouter une condition
+                        </button>
                       </div>
-                      {totals.discount > 0 && (
-                        <div className="flex justify-between py-1.5 border-b border-slate-100 text-blue-600">
-                          <span>Remise ({formData.discount_percent}%)</span>
-                          <span className="font-medium">- {formatCurrency(totals.discount)}</span>
+
+                      <input
+                        type="text"
+                        name="payment_terms"
+                        value={formData.payment_terms || ''}
+                        onChange={handleChange}
+                        placeholder="Methodes de paiement acceptees : ex Cheque, Virement bancaire..."
+                        className="w-full text-sm text-gray-600 border-0 border-b border-dashed border-gray-200 focus:outline-none focus:border-blue-400 bg-transparent py-0.5 placeholder:text-gray-300"
+                      />
+
+                      {(formData.deposit_percent || 0) > 0 && (
+                        <div className="flex items-center gap-2 text-orange-600 text-sm">
+                          <span>
+                            Acompte de {formData.deposit_percent || 0}% a la signature soit{' '}
+                            <strong>{formatCurrency(totals.deposit)}</strong> TTC
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, deposit_percent: 0 }))}
+                            className="text-gray-300 hover:text-red-400 transition-colors ml-1"
+                            title="Supprimer l'acompte"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
                         </div>
                       )}
-                      {totals.discount > 0 && (
-                        <div className="flex justify-between py-1.5 border-b border-slate-100">
-                          <span className="text-slate-500">Total HT net</span>
-                          <span className="font-semibold text-slate-800">{formatCurrency(totals.finalHT)}</span>
+
+                      <p className="text-sm text-gray-500">
+                        Reste a facturer :{' '}
+                        <strong className="text-gray-700">{formatCurrency(totals.finalNet - totals.deposit)}</strong> TTC
+                      </p>
+
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Ajouter texte libre
+                      </button>
+
+                      {/* Inline controls */}
+                      <div className="flex items-center gap-3 pt-1 flex-wrap">
+                        <div className="flex items-center gap-1.5">
+                          <label className="text-xs text-gray-400">Acompte&nbsp;(%)</label>
+                          <input
+                            type="number"
+                            name="deposit_percent"
+                            min="0"
+                            max="100"
+                            step="5"
+                            value={formData.deposit_percent || ''}
+                            onChange={handleChange}
+                            className="w-14 text-sm border border-gray-200 rounded-md px-2 py-0.5 text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
                         </div>
-                      )}
+                        <div className="flex items-center gap-1.5">
+                          <label className="text-xs text-gray-400">Validite&nbsp;(j)</label>
+                          <input
+                            type="number"
+                            name="validity_days"
+                            min="1"
+                            step="1"
+                            value={formData.validity_days || ''}
+                            onChange={handleChange}
+                            className="w-14 text-sm border border-gray-200 rounded-md px-2 py-0.5 text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        {!showDiscount ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowDiscount(true)}
+                            className="text-xs text-blue-500 hover:text-blue-700 border-b border-dashed border-blue-300"
+                          >
+                            + Remise globale
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <label className="text-xs text-gray-400">Remise&nbsp;(%)</label>
+                            <input
+                              type="number"
+                              name="discount_percent"
+                              min="0"
+                              max="100"
+                              step="0.5"
+                              value={formData.discount_percent || ''}
+                              onChange={handleChange}
+                              className="w-14 text-sm border border-gray-200 rounded-md px-2 py-0.5 text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right 1/3 – totals */}
+                    <div className="space-y-1.5 text-sm">
+                      <div className="flex justify-between py-1.5 border-b border-gray-100">
+                        <span className="text-gray-500">Total net HT</span>
+                        <span className="font-medium text-gray-800">{formatCurrency(totals.finalHT)}</span>
+                      </div>
                       {Object.entries(totals.tvaByRate).sort().map(([rate, amount]) => (
-                        <div key={rate} className="flex justify-between py-1 text-slate-500">
+                        <div key={rate} className="flex justify-between py-0.5 text-gray-400 text-xs">
                           <span>TVA {rate}%</span>
                           <span>{formatCurrency(amount)}</span>
                         </div>
                       ))}
                       {totals.waste > 0 && (
-                        <div className="flex justify-between py-1.5 border-b border-slate-100 text-slate-500">
+                        <div className="flex justify-between py-0.5 text-gray-400 text-xs">
                           <span>Frais dechetterie</span>
                           <span>+ {formatCurrency(totals.waste)}</span>
                         </div>
                       )}
-                      <div className="flex justify-between py-2 px-3 bg-blue-600 text-white rounded-lg mt-1">
-                        <span className="font-bold">Total TTC</span>
-                        <span className="font-bold text-lg">{formatCurrency(totals.finalTTC)}</span>
+                      <div className="flex justify-between py-1.5 border-b border-gray-100">
+                        <span className="text-gray-500">Total TTC</span>
+                        <span className="font-medium text-gray-800">{formatCurrency(totals.finalTTC)}</span>
                       </div>
                       {totals.premiums > 0 && (
-                        <>
-                          <div className="flex justify-between py-1.5 border-b border-slate-100 text-green-600">
-                            <span>Primes (CEE + MPR)</span>
-                            <span className="font-medium">- {formatCurrency(totals.premiums)}</span>
-                          </div>
-                          <div className="flex justify-between py-2 px-3 bg-green-50 text-green-800 rounded-lg">
-                            <span className="font-bold">Net a payer</span>
-                            <span className="font-bold text-lg">{formatCurrency(totals.finalNet)}</span>
-                          </div>
-                        </>
-                      )}
-                      {(formData.deposit_percent || 0) > 0 && (
-                        <div className="flex justify-between py-1.5 mt-1 border-t border-slate-200 text-blue-600">
-                          <span>Acompte ({formData.deposit_percent}%)</span>
-                          <span className="font-semibold">{formatCurrency(totals.deposit)}</span>
+                        <div className="flex justify-between py-0.5 text-green-600 text-xs">
+                          <span>Primes CEE + MPR</span>
+                          <span>- {formatCurrency(totals.premiums)}</span>
                         </div>
                       )}
-                      <div className="pt-2 text-xs text-slate-400 text-center">
-                        {lineItems.length} ligne{lineItems.length !== 1 ? 's' : ''} - {allSections.length} lot{allSections.length !== 1 ? 's' : ''}
+                      <div className="flex justify-between items-center py-2.5 px-3 bg-blue-600 text-white rounded-lg mt-2">
+                        <span className="font-bold text-sm">NET A PAYER</span>
+                        <span className="font-bold text-xl">{formatCurrency(totals.finalNet)}</span>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
 
-                {/* Apercu PDF */}
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <CardTitle className="text-base">Aperçu PDF</CardTitle>
-                        <button type="button" onClick={() => window.open('/settings?tab=documents&doc=entetes', '_blank')} className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1" title="Modifier l'en-tête et le pied de page du document">
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                          Paramètres du PDF
+                  </div>
+                </div>
+
+                {/* ── WASTE MANAGEMENT & PREMIUMS ─────────────────────── */}
+                <div className="px-8 py-3 border-t border-gray-100 flex items-center gap-6 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-gray-700">Gestion des dechets</h3>
+                    {(formData.waste_management_fee || 0) === 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, waste_management_fee: 0.01 }))}
+                        className="flex items-center gap-0.5 text-xs text-blue-500 hover:text-blue-700"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Definir
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          name="waste_management_fee"
+                          step="0.01"
+                          value={formData.waste_management_fee || ''}
+                          onChange={handleChange}
+                          className="w-20 text-sm border border-gray-200 rounded-md px-2 py-0.5 text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <span className="text-xs text-gray-400">EUR</span>
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, waste_management_fee: 0 }))}
+                          className="text-gray-300 hover:text-red-400 transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
                         </button>
                       </div>
-                      {pdfLoading && (
-                        <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                          <div className="w-3 h-3 border-2 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
-                          Generation...
-                        </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-sm font-semibold text-gray-700">Primes</h3>
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs text-gray-400">CEE (EUR)</label>
+                      <input
+                        type="number"
+                        name="cee_premium"
+                        step="0.01"
+                        value={formData.cee_premium || ''}
+                        onChange={handleChange}
+                        placeholder="0"
+                        className="w-20 text-sm border border-gray-200 rounded-md px-2 py-0.5 text-right focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs text-gray-400">MPR (EUR)</label>
+                      <input
+                        type="number"
+                        name="mpr_premium"
+                        step="0.01"
+                        value={formData.mpr_premium || ''}
+                        onChange={handleChange}
+                        placeholder="0"
+                        className="w-20 text-sm border border-gray-200 rounded-md px-2 py-0.5 text-right focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── NOTES ───────────────────────────────────────────── */}
+                <div className="px-8 py-4 border-t border-gray-100">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Notes / message au client</h3>
+                  <textarea
+                    name="notes"
+                    rows={2}
+                    value={formData.notes || ''}
+                    onChange={handleChange}
+                    placeholder="Remarques, precisions techniques, informations complementaires..."
+                    className="w-full text-sm text-gray-600 border-0 border-b border-dashed border-gray-200 focus:outline-none focus:border-blue-400 bg-transparent resize-none py-1 placeholder:text-gray-300"
+                  />
+                </div>
+
+                {/* ── NOTES DE BAS DE PAGE ────────────────────────────── */}
+                <div className="px-8 py-4 border-t border-gray-100 bg-gray-50 rounded-b-xl space-y-4">
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Pied de document (apparaît sur chaque page PDF)</h3>
+
+                  {/* Bank details */}
+                  <div>
+                    <p className="text-[11px] font-medium text-gray-400 mb-1.5">Coordonnées bancaires</p>
+                    <div className="border border-gray-200 rounded-lg bg-white px-4 py-3">
+                      {bankLine ? (
+                        <pre className="text-xs text-gray-600 font-sans whitespace-pre-wrap">{bankLine}</pre>
+                      ) : (
+                        <Link href="/settings?tab=entreprise" className="text-xs text-blue-600 hover:underline">
+                          + Configurer les coordonnées bancaires dans les paramètres
+                        </Link>
                       )}
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    {!formData.customer_id || lineItems.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-10 text-slate-400">
-                        <svg className="w-10 h-10 text-slate-200 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        <p className="text-xs text-center">Selectionnez un client et ajoutez des lignes</p>
-                      </div>
-                    ) : pdfUrl ? (
-                      <div className="space-y-2">
-                        <iframe src={pdfUrl} className="w-full border border-slate-200 rounded-lg"
-                          style={{ height: '500px' }} title="Apercu devis PDF" />
-                        <div className="flex gap-2">
-                          <Button type="button" variant="outline" size="sm" className="flex-1 gap-1"
-                            onClick={() => { const a = document.createElement('a'); a.href = pdfUrl; a.download = 'devis-preview.pdf'; a.click(); }}>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                            Telecharger
-                          </Button>
-                          <Button type="button" variant="ghost" size="sm" className="flex-1"
-                            onClick={() => setShowFullPdfPreview(true)}>
-                            Plein ecran
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center py-8">
-                        <p className="text-xs text-slate-500 mb-3">L&apos;apercu se genere automatiquement...</p>
-                        <Button type="button" size="sm" onClick={generatePdfPreview} loading={pdfLoading} className="gap-1">
-                          Generer l&apos;apercu
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                  </div>
+
+                  {/* Footer notes (RGE, certification, etc.) */}
+                  <div>
+                    <p className="text-[11px] font-medium text-gray-400 mb-1.5">Mentions complémentaires (RGE, certification, qualifications…)</p>
+                    <textarea
+                      name="footer_notes"
+                      rows={2}
+                      value={formData.footer_notes || ''}
+                      onChange={handleChange}
+                      placeholder="Ex : Entreprise certifiée RGE QualiPV — Assurance décennale n° … — SIRET …"
+                      className="w-full text-xs text-gray-600 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-white"
+                    />
+                  </div>
+
+                  {/* Legal mentions */}
+                  <div>
+                    <p className="text-[11px] font-medium text-gray-400 mb-1.5">Mentions légales obligatoires</p>
+                    <textarea
+                      name="legal_mentions"
+                      rows={2}
+                      value={formData.legal_mentions || ''}
+                      onChange={handleChange}
+                      placeholder="Ex : TVA non applicable, art. 293B du CGI — Délai de rétractation 14 jours…"
+                      className="w-full text-xs text-gray-600 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-white"
+                    />
+                  </div>
+
+                  {/* CGV collapsible */}
+                  <details className="group">
+                    <summary className="flex cursor-pointer items-center gap-1.5 text-xs text-gray-400 select-none list-none hover:text-gray-600 w-fit">
+                      <svg className="w-3 h-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      Conditions générales de vente
+                      <span className="text-gray-300">(pré-remplies depuis les paramètres)</span>
+                    </summary>
+                    <div className="mt-2">
+                      <textarea
+                        name="conditions"
+                        rows={3}
+                        className="w-full text-xs text-gray-500 border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        value={formData.conditions || ''}
+                        onChange={handleChange}
+                        placeholder="Conditions générales de vente..."
+                      />
+                    </div>
+                  </details>
+                </div>
 
               </div>
-            </div>
-          </form>
-        </div>
-      </div>
+              {/* end document panel */}
 
-      <Modal isOpen={showNewCustomerModal} title="Nouveau client"
-        onClose={() => setShowNewCustomerModal(false)} size="lg">
+              {/* Bottom action bar */}
+              <div className="mt-4 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={clearDraft}
+                  className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                >
+                  Vider le brouillon
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { if (confirmIfDirty()) router.push('/quotes'); }}
+                    className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {loading && <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                    Enregistrer le devis
+                  </button>
+                </div>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      ) : (
+        /* ═══ PREVIEW MODE ═════════════════════════════════════════════ */
+        <div className="flex-1 bg-gray-700 flex flex-col items-center overflow-y-auto py-6">
+
+          {/* Preview toolbar */}
+          <div className="w-full max-w-4xl px-4 mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-300 text-sm font-medium">Previsualisation PDF</span>
+              {pdfLoading && (
+                <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                  <div className="w-3 h-3 border-2 border-gray-500 border-t-gray-200 rounded-full animate-spin" />
+                  Generation...
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Link
+                href="/settings?tab=documents"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-200 hover:text-white bg-gray-600 hover:bg-gray-500 rounded-lg transition-colors"
+              >
+                Apparence
+              </Link>
+              {pdfUrl && (
+                <button
+                  type="button"
+                  onClick={() => { const a = document.createElement('a'); a.href = pdfUrl; a.download = 'devis-preview.pdf'; a.click(); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-200 hover:text-white bg-gray-600 hover:bg-gray-500 rounded-lg transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Telecharger
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* PDF display */}
+          {!formData.customer_id || lineItems.length === 0 ? (
+            <div className="text-center py-24">
+              <div className="w-16 h-16 bg-gray-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <p className="text-gray-300 text-sm mb-1">Selectionnez un client et ajoutez des lignes</p>
+              <p className="text-gray-500 text-xs mb-4">pour generer la previsualisation PDF automatiquement</p>
+              <button
+                type="button"
+                onClick={() => setActiveTab('edition')}
+                className="px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              >
+                Retour a l&apos;edition
+              </button>
+            </div>
+          ) : pdfUrl ? (
+            <div className="w-full max-w-4xl px-4">
+              <iframe
+                src={pdfUrl}
+                className="w-full rounded-lg shadow-2xl bg-white"
+                style={{ height: '85vh' }}
+                title="Previsualisation devis PDF"
+              />
+            </div>
+          ) : (
+            <div className="text-center py-24">
+              <p className="text-gray-400 text-sm mb-3">Generation de l&apos;apercu en cours...</p>
+              <button
+                type="button"
+                onClick={generatePdfPreview}
+                disabled={pdfLoading}
+                className="flex items-center gap-2 mx-auto px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {pdfLoading && <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                Generer l&apos;apercu
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── MODALS ──────────────────────────────────────────────────── */}
+      <Modal isOpen={showNewCustomerModal} title="Nouveau client" onClose={() => setShowNewCustomerModal(false)} size="lg">
         <NewCustomerForm onSuccess={async () => { await loadData(); }} onClose={() => setShowNewCustomerModal(false)} />
       </Modal>
-
-      <Modal isOpen={showFullPdfPreview} title="Apercu du devis"
-        onClose={() => setShowFullPdfPreview(false)} size="lg">
-        {pdfUrl
-          ? <iframe src={pdfUrl} className="w-full" style={{ height: '80vh' }} title="Apercu complet PDF" />
-          : <div className="p-6 text-center text-slate-400">Aucun PDF genere.</div>
-        }
-      </Modal>
-    </MainLayout>
+    </div>
   );
 }
