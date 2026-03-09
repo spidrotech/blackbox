@@ -2,19 +2,26 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { authService } from '@/services/api';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // Simulate async request — replace with real API call when available
-    await new Promise(r => setTimeout(r, 800));
-    setSubmitted(true);
-    setLoading(false);
+    setError('');
+    try {
+      await authService.forgotPassword(email);
+      setSubmitted(true);
+    } catch {
+      setSubmitted(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

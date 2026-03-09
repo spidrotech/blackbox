@@ -13,10 +13,12 @@ import { buildDetailPath, buildEditPath } from '@/lib/routes';
 
 const BADGE: Record<string, { label: string; cls: string; dot: string }> = {
   draft:     { label: 'Brouillon', cls: 'bg-slate-50 text-slate-600 ring-1 ring-slate-200', dot: 'bg-slate-400' },
-  sent:      { label: 'Envoyé',    cls: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200', dot: 'bg-blue-500' },
-  viewed:    { label: 'Consulté',  cls: 'bg-purple-50 text-purple-700 ring-1 ring-purple-200', dot: 'bg-purple-500' },
+  finalized: { label: 'Finalisé',  cls: 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200', dot: 'bg-indigo-500' },
+  sent:      { label: 'Envoyée',   cls: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200', dot: 'bg-blue-500' },
+  viewed:    { label: 'Envoyée',   cls: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200', dot: 'bg-blue-500' },
   paid:      { label: 'Payée',     cls: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', dot: 'bg-emerald-500' },
-  partially_paid: { label: 'Partiel', cls: 'bg-teal-50 text-teal-700 ring-1 ring-teal-200', dot: 'bg-teal-500' },
+  partial:   { label: 'Partielle', cls: 'bg-teal-50 text-teal-700 ring-1 ring-teal-200', dot: 'bg-teal-500' },
+  partially_paid: { label: 'Partielle', cls: 'bg-teal-50 text-teal-700 ring-1 ring-teal-200', dot: 'bg-teal-500' },
   overdue:   { label: 'En retard', cls: 'bg-red-50 text-red-700 ring-1 ring-red-200', dot: 'bg-red-500' },
   cancelled: { label: 'Annulée',   cls: 'bg-gray-50 text-gray-500 ring-1 ring-gray-200', dot: 'bg-gray-400' },
 };
@@ -36,12 +38,12 @@ const FACTURX_BADGE: Record<string, { label: string; cls: string }> = {
 };
 
 const TABS = [
-  { value: '',        label: 'Toutes',    color: 'text-gray-600' },
-  { value: 'draft',   label: 'Brouillon', color: 'text-gray-500' },
-  { value: 'sent',    label: 'Envoyée',   color: 'text-blue-600' },
-  { value: 'partial', label: 'Partielle', color: 'text-amber-600' },
-  { value: 'overdue', label: 'En retard', color: 'text-red-600' },
-  { value: 'paid',    label: 'Payée',     color: 'text-emerald-600' },
+  { value: '',          label: 'Toutes',    color: 'text-gray-600' },
+  { value: 'draft',     label: 'Brouillon', color: 'text-gray-500' },
+  { value: 'sent',      label: 'Envoyée',   color: 'text-blue-600' },
+  { value: 'overdue',   label: 'En retard', color: 'text-red-600' },
+  { value: 'paid',      label: 'Payée',     color: 'text-emerald-600' },
+  { value: 'cancelled', label: 'Annulée',   color: 'text-gray-400' },
 ];
 
 const MONTH_FR = ['Jan','Fév','Mar','Avr','Mai','Jui','Jul','Aoû','Sep','Oct','Nov','Déc'];
@@ -315,7 +317,7 @@ export default function InvoicesPage() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return invoices.filter(inv => {
-      const matchTab = tab === '' || inv.status === tab;
+      const matchTab = tab === '' || (tab === 'sent' ? ['sent', 'partial', 'partially_paid', 'viewed'].includes(inv.status) : inv.status === tab);
       const invType = (inv as InvoiceListItemLike & { invoiceType?: string }).invoiceType ||
                       (inv as InvoiceListItemLike & { invoice_type?: string }).invoice_type || 'invoice';
       const matchType = typeFilter === '' || invType === typeFilter;

@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pydantic import BaseModel
+import secrets
 
 from app.db.session import get_session
 from app.models import User, UserCreate, UserRead, Token, Company, LoginRequest, UserMeResponse
@@ -203,3 +204,72 @@ def update_profile(
             "companyId": current_user.company_id,
         }
     }
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
+
+RESET_TOKEN_EXPIRE_MINUTES = 30
+
+
+@router.post("/forgot-password", response_model=dict)
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    session: Session = Depends(get_session),
+):
+    """Demande de réinitialisation de mot de passe.
+    Génère un token et le stocke (en production, envoyer par email)."""
+    user = session.exec(select(User).where(User.email == payload.email)).first()
+    if user:
+        token = secrets.token_urlsafe(32)
+        user.reset_token = token
+        user.reset_token_expires = datetime.utcnow() + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
+        session.add(user)
+        session.commit()
+        # TODO: envoyer l'email avec le lien /reset-password?token=...
+        # Pour le dev, on log le token
+        print(f"[DEV] Reset token for {user.email}: {token}")
+
+    # Toujours retourner un succès pour ne pas révéler l'existence d'un compte
+    return {"success": True, "message": "Si un compte existe avec cet email, un lien de réinitialisation a été envoyé."}
+
+
+@router.post("/reset-password", response_model=dict)
+def reset_password(
+    payload: ResetPasswordRequest,
+    session: Session = Depends(get_session),
+):
+    """Réinitialise le mot de passe à l'aide du token."""
+    if not payload.password or len(payload.password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Le mot de passe doit contenir au moins 8 caractères",
+        )
+
+    user = session.exec(
+        select(User).where(
+            User.reset_token == payload.token,
+            User.reset_token_expires > datetime.utcnow(),
+        )
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Lien invalide ou expiré. Veuillez refaire une demande.",
+        )
+
+    user.password = get_password_hash(payload.password)
+    user.reset_token = None
+    user.reset_token_expires = None
+    user.updated_at = datetime.utcnow()
+    session.add(user)
+    session.commit()
+
+    return {"success": True, "message": "Mot de passe mis à jour avec succès."}

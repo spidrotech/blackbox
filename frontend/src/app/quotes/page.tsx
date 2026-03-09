@@ -13,28 +13,38 @@ import { buildDetailPath, buildEditPath } from '@/lib/routes';
 
 const BADGE: Record<string, { label: string; cls: string; dot: string }> = {
   draft:     { label: 'Brouillon', cls: 'bg-slate-50 text-slate-600 ring-1 ring-slate-200', dot: 'bg-slate-400' },
+  finalized: { label: 'Finalisé',  cls: 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200', dot: 'bg-indigo-500' },
   sent:      { label: 'Envoyé',    cls: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200', dot: 'bg-blue-500' },
-  viewed:    { label: 'Consulté',  cls: 'bg-purple-50 text-purple-700 ring-1 ring-purple-200', dot: 'bg-purple-500' },
+  viewed:    { label: 'Envoyé',    cls: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200', dot: 'bg-blue-500' },
   signed:    { label: 'Signé',     cls: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', dot: 'bg-emerald-500' },
-  accepted:  { label: 'Accepté',   cls: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', dot: 'bg-emerald-500' },
+  accepted:  { label: 'Signé',     cls: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', dot: 'bg-emerald-500' },
   refused:   { label: 'Refusé',    cls: 'bg-red-50 text-red-700 ring-1 ring-red-200', dot: 'bg-red-500' },
   rejected:  { label: 'Refusé',    cls: 'bg-red-50 text-red-700 ring-1 ring-red-200', dot: 'bg-red-500' },
-  finalized: { label: 'Finalisé',  cls: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200', dot: 'bg-emerald-500' },
-  expired:   { label: 'Expiré',    cls: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200', dot: 'bg-amber-500' },
+  expired:   { label: 'Annulé',    cls: 'bg-gray-50 text-gray-500 ring-1 ring-gray-200', dot: 'bg-gray-400' },
   cancelled: { label: 'Annulé',    cls: 'bg-gray-50 text-gray-500 ring-1 ring-gray-200', dot: 'bg-gray-400' },
 };
 
 const TABS = [
   { value: '', label: 'Tous' },
   { value: 'draft', label: 'Brouillon' },
-  { value: 'sent', label: 'Envoyé' },
-  { value: 'viewed', label: 'Consulté' },
-  { value: 'signed', label: 'Signé' },
-  { value: 'accepted', label: 'Accepté' },
   { value: 'finalized', label: 'Finalisé' },
-  { value: 'rejected', label: 'Refusé' },
-  { value: 'expired', label: 'Expiré' },
+  { value: 'sent', label: 'Envoyé' },
+  { value: 'signed', label: 'Signé' },
+  { value: 'refused', label: 'Refusé' },
+  { value: 'cancelled', label: 'Annulé' },
 ];
+
+/** Group merged statuses together for tab filtering */
+const TAB_GROUPS: Record<string, string[]> = {
+  sent: ['sent', 'viewed'],
+  signed: ['signed', 'accepted'],
+  cancelled: ['cancelled', 'expired'],
+  refused: ['refused', 'rejected'],
+};
+const matchesTab = (status: string, tab: string): boolean => {
+  const group = TAB_GROUPS[tab];
+  return group ? group.includes(status) : status === tab;
+};
 
 function StatCard({ label, value, sub, color = 'blue' }: { label: string; value: string; sub?: string; color?: string }) {
   const colorMap: Record<string, string> = {
@@ -120,11 +130,11 @@ export default function QuotesPage() {
       q.reference.toLowerCase().includes(search.toLowerCase()) ||
       (q.subject || q.description || '').toLowerCase().includes(search.toLowerCase()) ||
       getCustomerName(q).toLowerCase().includes(search.toLowerCase());
-    const matchTab = tab === '' || q.status === tab;
+    const matchTab = tab === '' || matchesTab(q.status, tab);
     return matchSearch && matchTab;
   });
 
-  const countByTab = (val: string) => val === '' ? quotes.length : quotes.filter(q => q.status === val).length;
+  const countByTab = (val: string) => val === '' ? quotes.length : quotes.filter(q => matchesTab(q.status, val)).length;
 
   const handleDuplicate = async (id: number) => {
     setActionLoading(id);

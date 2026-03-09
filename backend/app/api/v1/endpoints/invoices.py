@@ -8,7 +8,7 @@ from decimal import Decimal
 from app.db.session import get_session
 from app.models import (
     Invoice, InvoiceCreate, InvoiceUpdate, PaymentCreate,
-    LineItem, Customer, Project, Company, User, Quote
+    LineItem, Customer, Project, Company, User, Quote, Address
 )
 from app.models.enums import InvoiceStatus, LineItemType
 from app.core.security import get_current_user_required
@@ -53,6 +53,67 @@ def _default_bank_details(company: Optional[Company]) -> Optional[str]:
     if company.iban:
         return f"IBAN : {company.iban}"
     return None
+
+
+def _build_company_pdf_data(company_obj: Optional[Company]) -> CompanyData:
+    co = CompanyData()
+    if not company_obj:
+        return co
+
+    co.name = company_obj.name or ""
+    co.address = company_obj.address or ""
+    co.city = company_obj.city or ""
+    co.postal_code = company_obj.postal_code or ""
+    co.country = company_obj.country or "France"
+    co.phone = company_obj.phone or ""
+    co.email = company_obj.email or ""
+    co.website = company_obj.website or ""
+    co.siret = company_obj.siret or ""
+    co.vat_number = company_obj.vat_number or ""
+    co.iban = company_obj.iban or ""
+    co.bic = company_obj.bic or ""
+    co.logo_url = company_obj.logo_url or ""
+    co.header_text = company_obj.header_text or ""
+    co.footer_text = company_obj.footer_text or ""
+    co.vat_subject = bool(getattr(company_obj, 'vat_subject', True))
+    co.rcs_city = getattr(company_obj, 'rcs_city', None) or ""
+    co.rm_number = getattr(company_obj, 'rm_number', None) or ""
+    co.capital = float(getattr(company_obj, 'capital', None) or 0)
+    co.ape_code = getattr(company_obj, 'ape_code', None) or ""
+    co.guarantee_type = getattr(company_obj, 'guarantee_type', None) or ""
+    co.insurance_name = getattr(company_obj, 'insurance_name', None) or ""
+    co.insurance_coverage = getattr(company_obj, 'insurance_coverage', None) or ""
+    co.insurance_address = getattr(company_obj, 'insurance_address', None) or ""
+    co.insurance_zipcode = getattr(company_obj, 'insurance_zipcode', None) or ""
+    co.insurance_city = getattr(company_obj, 'insurance_city', None) or ""
+    co.visuals_json = getattr(company_obj, 'visuals_json', None) or ""
+    return co
+
+
+def _build_customer_pdf_data(session: Session, customer_obj: Optional[Customer]) -> CustomerData:
+    cu = CustomerData()
+    if not customer_obj:
+        return cu
+
+    cu.name = customer_obj.name or ""
+    cu.contact_name = customer_obj.contact_name or ""
+    cu.phone = customer_obj.phone or customer_obj.mobile or ""
+    cu.email = customer_obj.email or ""
+    cu.siret = customer_obj.siret or ""
+    cu.vat = customer_obj.vat or ""
+
+    address_obj = session.get(Address, customer_obj.address_id) if customer_obj.address_id else None
+    if address_obj:
+        street_line = " ".join(part for part in [address_obj.number or "", address_obj.street or ""] if part).strip()
+        if address_obj.complement:
+            cu.address = ", ".join(part for part in [street_line, address_obj.complement] if part)
+        else:
+            cu.address = street_line
+        cu.city = address_obj.city or ""
+        cu.postal_code = address_obj.postal_code or ""
+        cu.country = address_obj.country or "France"
+
+    return cu
 
 
 def get_invoice_response(invoice: Invoice, session: Session) -> dict:
@@ -1154,35 +1215,9 @@ def download_invoice_pdf(
     company_obj = session.get(Company, invoice.company_id) if invoice.company_id else None
     customer_obj = session.get(Customer, invoice.customer_id) if invoice.customer_id else None
 
-    co = CompanyData()
-    if company_obj:
-        co.name = company_obj.name or ""
-        co.address = company_obj.address or ""
-        co.city = company_obj.city or ""
-        co.postal_code = company_obj.postal_code or ""
-        co.phone = company_obj.phone or ""
-        co.email = company_obj.email or ""
-        co.website = company_obj.website or ""
-        co.siret = company_obj.siret or ""
-        co.vat_number = company_obj.vat_number or ""
-        co.iban = company_obj.iban or ""
-        co.bic = company_obj.bic or ""
-        co.logo_url = company_obj.logo_url or ""
-        co.header_text = company_obj.header_text or ""
-        co.footer_text = company_obj.footer_text or ""
-        co.vat_subject = bool(getattr(company_obj, 'vat_subject', True))
-        co.rcs_city = getattr(company_obj, 'rcs_city', None) or ""
-        co.rm_number = getattr(company_obj, 'rm_number', None) or ""
-        co.capital = float(getattr(company_obj, 'capital', None) or 0)
-        co.ape_code = getattr(company_obj, 'ape_code', None) or ""
-        co.visuals_json = getattr(company_obj, 'visuals_json', None) or ""
+    co = _build_company_pdf_data(company_obj)
 
-    cu = CustomerData()
-    if customer_obj:
-        cu.name = customer_obj.name or ""
-        cu.contact_name = customer_obj.contact_name or ""
-        cu.phone = customer_obj.phone or ""
-        cu.email = customer_obj.email or ""
+    cu = _build_customer_pdf_data(session, customer_obj)
 
     db_items = session.exec(
         select(LineItem).where(LineItem.invoice_id == invoice.id).order_by(LineItem.display_order)
@@ -1263,35 +1298,9 @@ def download_facturx_pdf(
     customer_obj = session.get(Customer, invoice.customer_id) if invoice.customer_id else None
 
     # 1. Générer le PDF classique
-    co = CompanyData()
-    if company_obj:
-        co.name = company_obj.name or ""
-        co.address = company_obj.address or ""
-        co.city = company_obj.city or ""
-        co.postal_code = company_obj.postal_code or ""
-        co.phone = company_obj.phone or ""
-        co.email = company_obj.email or ""
-        co.website = company_obj.website or ""
-        co.siret = company_obj.siret or ""
-        co.vat_number = company_obj.vat_number or ""
-        co.iban = company_obj.iban or ""
-        co.bic = company_obj.bic or ""
-        co.logo_url = company_obj.logo_url or ""
-        co.header_text = company_obj.header_text or ""
-        co.footer_text = company_obj.footer_text or ""
-        co.vat_subject = bool(getattr(company_obj, 'vat_subject', True))
-        co.rcs_city = getattr(company_obj, 'rcs_city', None) or ""
-        co.rm_number = getattr(company_obj, 'rm_number', None) or ""
-        co.capital = float(getattr(company_obj, 'capital', None) or 0)
-        co.ape_code = getattr(company_obj, 'ape_code', None) or ""
-        co.visuals_json = getattr(company_obj, 'visuals_json', None) or ""
+    co = _build_company_pdf_data(company_obj)
 
-    cu = CustomerData()
-    if customer_obj:
-        cu.name = customer_obj.name or ""
-        cu.contact_name = customer_obj.contact_name or ""
-        cu.phone = customer_obj.phone or ""
-        cu.email = customer_obj.email or ""
+    cu = _build_customer_pdf_data(session, customer_obj)
 
     db_items = session.exec(
         select(LineItem).where(LineItem.invoice_id == invoice.id).order_by(LineItem.display_order)

@@ -32,6 +32,10 @@ class User(SQLModel, table=True):
     subscription_id: Optional[int] = Field(default=None)
     
     is_active: bool = Field(default=True)
+
+    # Password reset
+    reset_token: Optional[str] = Field(default=None, max_length=255)
+    reset_token_expires: Optional[datetime] = Field(default=None)
     
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = Field(default=None)

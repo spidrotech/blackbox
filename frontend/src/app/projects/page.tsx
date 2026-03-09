@@ -133,6 +133,22 @@ function getPathCenter(pathStr: string): Coords {
   return { x: (minX + maxX)/2, y: (minY + maxY)/2 };
 }
 
+function getPathBBox(pathStr: string): { x: number; y: number; w: number; h: number } {
+  const re = /[ML](-?[\d.]+),(-?[\d.]+)/g;
+  let m;
+  let minX = 1e5, maxX = -1e5, minY = 1e5, maxY = -1e5;
+  while ((m = re.exec(pathStr))) {
+    const x = parseFloat(m[1]), y = parseFloat(m[2]);
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
+const DEFAULT_VIEWBOX = '11 -5 606 600';
+
 const REGION_DEFINITIONS_BASE: RegionDefinition[] = [
   { id: 'hdf', label: 'Hauts-de-France', shortLabel: 'HDF', coords: {x:0,y:0}, path: '', departments: ['02', '59', '60', '62', '80'], fill: '#e0e7ff', stroke: '#c7d2fe', textColor: '#3730a3' },
   { id: 'idf', label: 'Île-de-France', shortLabel: 'IDF', coords: {x:0,y:0}, path: '', departments: ['75', '77', '78', '91', '92', '93', '94', '95'], fill: '#c7d2fe', stroke: '#a5b4fc', textColor: '#312e81' },
@@ -513,10 +529,43 @@ function FranceMap({
   const selectedRegionLabel = selectedRegionId ? REGION_BY_ID[selectedRegionId].label : null;
   const selectedDepartmentsList = selectedRegionId ? REGION_DEFINITIONS.find(r => r.id === selectedRegionId)?.departments || [] : [];
 
+  /* ── Compute zoomed viewBox when a region is selected ── */
+  const viewBox = useMemo(() => {
+    if (!selectedRegionId) return DEFAULT_VIEWBOX;
+    const region = REGION_BY_ID[selectedRegionId];
+    const bbox = getPathBBox(region.path);
+    // Expand bbox to include departments for accuracy
+    const deps = region.departments;
+    for (const depCode of deps) {
+      const depData = franceDepartmentsMap.locations.find(l => l.id === depCode);
+      if (!depData) continue;
+      const db = getPathBBox(depData.path);
+      const right = Math.max(bbox.x + bbox.w, db.x + db.w);
+      const bottom = Math.max(bbox.y + bbox.h, db.y + db.h);
+      bbox.x = Math.min(bbox.x, db.x);
+      bbox.y = Math.min(bbox.y, db.y);
+      bbox.w = right - bbox.x;
+      bbox.h = bottom - bbox.y;
+    }
+    const pad = Math.max(bbox.w, bbox.h) * 0.18;
+    return `${bbox.x - pad} ${bbox.y - pad} ${bbox.w + pad * 2} ${bbox.h + pad * 2}`;
+  }, [selectedRegionId]);
+
+  const handleClear = () => {
+    onSelectRegion(null);
+    onSelectDepartment(null);
+    onSelectWorksite(null);
+  };
+
   return (
     <div className="relative">
-      <svg viewBox="11 -5 606 600" className="w-full h-auto max-h-[600px] drop-shadow-md" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox={viewBox} className="w-full h-auto max-h-[600px] drop-shadow-md" xmlns="http://www.w3.org/2000/svg">
         
+        {/* Background click-area to deselect */}
+        {selectedRegionId && (
+          <rect x="-500" y="-500" width="2000" height="2000" fill="transparent" onClick={handleClear} />
+        )}
+
         {REGION_DEFINITIONS.map((region) => {
           const count = regionCounts[region.id] ?? 0;
           const isActive = selectedRegionId === region.id;
@@ -656,9 +705,29 @@ function FranceMap({
       </div>
 
       <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-md rounded-xl px-4 py-3 shadow-md border border-slate-100 max-w-[240px]">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Filtre région</p>
-        <p className="text-xs font-semibold text-gray-700 mt-0.5">{selectedRegionLabel ?? 'Toute la France'}</p>
-        <p className="text-[10px] text-gray-400 mt-0.5">Cliquez sur une région puis sur un département pour affiner.</p>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Filtre région</p>
+            <p className="text-xs font-semibold text-gray-700 mt-0.5">{selectedRegionLabel ?? 'Toute la France'}</p>
+          </div>
+          {selectedRegionId && (
+            <button
+              onClick={handleClear}
+              className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors flex-shrink-0"
+              title="Réinitialiser le filtre"
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </button>
+          )}
+        </div>
+        {!selectedRegionId && (
+          <p className="text-[10px] text-gray-400 mt-0.5">Cliquez sur une région pour zoomer et affiner.</p>
+        )}
+        {selectedRegionId && selectedDepartmentCode && (
+          <p className="text-[10px] text-gray-400 mt-0.5">
+            Dept. : <span className="font-medium text-gray-600">{DEPARTMENT_LABELS[selectedDepartmentCode] ?? selectedDepartmentCode}</span>
+          </p>
+        )}
       </div>
 
       <div className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-md rounded-xl px-4 py-3 shadow-md border border-slate-100">

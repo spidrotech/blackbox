@@ -172,6 +172,16 @@ export const authService = {
     if (typeof window === 'undefined') return false;
     return !!localStorage.getItem('access_token');
   },
+
+  async forgotPassword(email: string): Promise<ApiResponse<null>> {
+    const response = await api.post<ApiResponse<null>>('/auth/forgot-password', { email });
+    return response.data;
+  },
+
+  async resetPassword(token: string, password: string): Promise<ApiResponse<null>> {
+    const response = await api.post<ApiResponse<null>>('/auth/reset-password', { token, password });
+    return response.data;
+  },
 };
 
 // Customer Service

@@ -4,7 +4,7 @@ export function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Pages accessibles sans authentification (publiques)
-  const publicPages = ['/', '/login', '/register', '/contact', '/about', '/pricing'];
+  const publicPages = ['/', '/login', '/register', '/contact', '/about', '/pricing', '/cgu', '/privacy', '/legal', '/forgot-password', '/reset-password'];
   
   // Pages protégées qui nécessitent une authentification
   const protectedPages = ['/dashboard', '/projects', '/customers', '/quotes', '/invoices', '/suppliers', '/purchases', '/equipment', '/price-library', '/time-entries'];

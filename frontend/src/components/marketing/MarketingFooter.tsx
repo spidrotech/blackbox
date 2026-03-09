@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { GestarLogo } from '@/components/ui/GestarLogo';
 
 const footerLinks = {
   Produit: [
@@ -12,13 +13,13 @@ const footerLinks = {
     { label: 'Mot de passe oublié', href: '/forgot-password' },
     { label: 'Accueil', href: '/' },
   ],
-  Legal: [
-    { label: 'CGU', href: '#' },
-    { label: 'Politique de confidentialite', href: '#' },
-    { label: 'Mentions legales', href: '#' },
+  Légal: [
+    { label: 'CGU', href: '/cgu' },
+    { label: 'Politique de confidentialité', href: '/privacy' },
+    { label: 'Mentions légales', href: '/legal' },
   ],
-  Societe: [
-    { label: 'A propos', href: '#' },
+  Société: [
+    { label: 'À propos', href: '/about' },
     { label: 'Contact', href: '/contact' },
     { label: 'Tarifs', href: '/pricing' },
   ],
@@ -31,11 +32,7 @@ export function MarketingFooter(): JSX.Element {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-12">
           <div className="lg:col-span-2">
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-              </div>
+              <GestarLogo size={32} />
               <span className="text-xl font-bold">Gestar</span>
             </div>
             <p className="text-gray-400 text-sm leading-relaxed mb-6 max-w-xs">
