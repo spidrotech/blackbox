@@ -8,11 +8,6 @@ const footerLinks = {
     { label: 'Contact', href: '/contact' },
     { label: 'Essai gratuit', href: '/register' },
   ],
-  Ressources: [
-    { label: 'Connexion', href: '/login' },
-    { label: 'Mot de passe oublié', href: '/forgot-password' },
-    { label: 'Accueil', href: '/' },
-  ],
   Légal: [
     { label: 'CGU', href: '/cgu' },
     { label: 'Politique de confidentialité', href: '/privacy' },
@@ -27,38 +22,34 @@ const footerLinks = {
 
 export function MarketingFooter(): JSX.Element {
   return (
-    <footer className="bg-gray-900 text-white">
+    <footer className="border-t border-slate-200 bg-white text-slate-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-12">
-          <div className="lg:col-span-2">
-            <div className="flex items-center gap-2 mb-4">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+          <div>
+            <div className="mb-4 flex items-center gap-2">
               <GestarLogo size={32} />
-              <span className="text-xl font-bold">Gestar</span>
+              <span className="text-xl font-bold text-slate-950">Gestar</span>
             </div>
-            <p className="text-gray-400 text-sm leading-relaxed mb-6 max-w-xs">
+            <p className="mb-6 max-w-sm text-sm leading-relaxed text-slate-600">
               Logiciel de gestion pour artisans et PME du batiment. Devis, facturation, chantiers et relation client dans un seul outil.
             </p>
-            <div className="flex items-center gap-3">
-              <a href="#" aria-label="LinkedIn" className="w-9 h-9 rounded-lg bg-gray-800 hover:bg-blue-600 text-gray-400 hover:text-white flex items-center justify-center transition-colors">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-                </svg>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <a href="mailto:contact@gestar.fr" className="rounded-2xl border border-slate-200 bg-stone-50 px-4 py-3 text-sm text-slate-700 transition-colors hover:border-slate-300 hover:text-slate-950">
+                contact@gestar.fr
               </a>
-              <a href="#" aria-label="Twitter" className="w-9 h-9 rounded-lg bg-gray-800 hover:bg-blue-600 text-gray-400 hover:text-white flex items-center justify-center transition-colors">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                </svg>
-              </a>
+              <div className="rounded-2xl border border-slate-200 bg-stone-50 px-4 py-3 text-sm text-slate-700">
+                Hébergé et opéré en France
+              </div>
             </div>
           </div>
 
           {Object.entries(footerLinks).map(([section, links]) => (
             <div key={section}>
-              <h4 className="text-sm font-semibold text-white uppercase tracking-wider mb-4">{section}</h4>
+              <h4 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-950">{section}</h4>
               <ul className="space-y-3">
                 {links.map((link) => (
                   <li key={link.label}>
-                    <Link href={link.href} className="text-gray-400 hover:text-white text-sm transition-colors">
+                    <Link href={link.href} className="text-sm text-slate-500 transition-colors hover:text-slate-950">
                       {link.label}
                     </Link>
                   </li>
@@ -68,10 +59,10 @@ export function MarketingFooter(): JSX.Element {
           ))}
         </div>
       </div>
-      <div className="border-t border-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-gray-500 text-sm">&copy; {new Date().getFullYear()} Gestar. Tous droits reserves.</p>
-          <p className="text-gray-600 text-sm">Concu et heberge en France</p>
+      <div className="border-t border-slate-200">
+        <div className="max-w-7xl mx-auto flex flex-col items-center justify-between gap-4 px-4 py-6 sm:flex-row sm:px-6 lg:px-8">
+          <p className="text-sm text-slate-500">&copy; {new Date().getFullYear()} Gestar. Tous droits reserves.</p>
+          <p className="text-sm text-slate-500">Concu pour une gestion simple, rapide et claire.</p>
         </div>
       </div>
     </footer>

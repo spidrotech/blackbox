@@ -59,6 +59,13 @@ class UserCreate(SQLModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone: Optional[str] = None
+    company_name: Optional[str] = None
+    company_siret: Optional[str] = None
+    company_address: Optional[str] = None
+    company_postal_code: Optional[str] = None
+    company_city: Optional[str] = None
+    company_country: Optional[str] = None
+    company_ape_code: Optional[str] = None
 
 
 class UserRead(SQLModel):

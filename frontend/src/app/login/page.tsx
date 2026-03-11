@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { AuthShell } from '@/components/auth/AuthShell';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginPage() {
@@ -29,82 +30,24 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left panel — branding */}
-      <div className="hidden lg:flex flex-col w-[55%] bg-gradient-to-br from-blue-950 via-blue-900 to-blue-800 relative overflow-hidden">
-        {/* Decorative circles */}
-        <div className="absolute -top-20 -left-20 w-80 h-80 rounded-full bg-blue-700/30 blur-3xl" />
-        <div className="absolute top-1/3 right-0 w-96 h-96 rounded-full bg-sky-500/20 blur-3xl" />
-        <div className="absolute bottom-0 left-1/4 w-64 h-64 rounded-full bg-blue-600/20 blur-3xl" />
-
-        {/* Grid pattern overlay */}
-        <div className="absolute inset-0 opacity-[0.04]"
-          style={{ backgroundImage: 'linear-gradient(90deg,#fff 1px,transparent 1px),linear-gradient(#fff 1px,transparent 1px)', backgroundSize: '40px 40px' }} />
-
-        <div className="relative z-10 flex flex-col h-full px-12 py-10">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-3 w-fit">
-            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-            </div>
-            <span className="text-2xl font-bold text-white tracking-tight">Gestar</span>
-          </Link>
-
-          {/* Main pitch */}
-          <div className="mt-auto mb-auto pt-16">
-            <p className="text-blue-300 text-sm font-semibold uppercase tracking-widest mb-4">Logiciel de gestion du bâtiment</p>
-            <h1 className="text-4xl font-extrabold text-white leading-tight mb-6">
-              Pilotez votre activité<br />
-              <span className="text-sky-300">comme les pros</span>
-            </h1>
-            <p className="text-blue-200 text-base leading-relaxed max-w-sm">
-              Devis, factures, clients, projets et suivi de chantier — tout en un. Conçu pour les artisans et PME du BTP.
-            </p>
-
-            {/* Feature list */}
-            <ul className="mt-8 space-y-3">
-              {[
-                { icon: '\ud83d\udcdd', label: 'Devis professionnels en quelques clics' },
-                { icon: '\ud83d\udce7', label: 'Envoi PDF par email avec signature électronique' },
-                { icon: '\ud83d\udcca', label: 'Tableau de bord et statistiques en temps réel' },
-                { icon: '\u26a1', label: 'Conversion devis → facture automatique' },
-              ].map((f, i) => (
-                <li key={i} className="flex items-center gap-3 text-blue-100 text-sm">
-                  <span className="text-base">{f.icon}</span>
-                  {f.label}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Footer */}
-          <p className="text-blue-400/60 text-xs">&copy; {new Date().getFullYear()} Gestar. Tous droits réservés.</p>
-        </div>
-      </div>
-
-      {/* Right panel — form */}
-      <div className="flex-1 flex flex-col justify-center items-center px-8 py-12 bg-white">
-        {/* Mobile logo */}
-        <Link href="/" className="lg:hidden flex items-center gap-2 mb-8">
-          <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-            </svg>
-          </div>
-          <span className="text-xl font-bold text-gray-900">Gestar</span>
-        </Link>
-
-        <div className="w-full max-w-sm">
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">Connexion</h2>
-          <p className="text-gray-500 text-sm mb-8">Content de vous revoir !</p>
+    <AuthShell
+      badge="Connexion sécurisée"
+      title="Retrouvez votre"
+      accent="espace de gestion"
+      description="Accédez à vos devis, factures, chantiers et tableaux de bord depuis un environnement clair, rapide et pensé pour le terrain."
+      points={[
+        'Suivi centralisé des documents et relances clients.',
+        'Accès rapide au tableau de bord et aux indicateurs clés.',
+        'Flux devis, facturation et chantiers dans un seul espace.',
+      ]}
+    >
+      <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.35)] sm:p-10">
+        <h2 className="text-3xl font-black text-slate-950 mb-1">Connexion</h2>
+        <p className="mb-8 text-sm text-slate-500">Content de vous revoir.</p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
+              <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -114,9 +57,9 @@ export default function LoginPage() {
 
             {/* Email */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Adresse email</label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Adresse email</label>
               <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
                   </svg>
@@ -127,7 +70,7 @@ export default function LoginPage() {
                   onChange={e => setEmail(e.target.value)}
                   placeholder="votre@email.com"
                   required
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all"
+                  className="w-full rounded-2xl border border-slate-300 bg-stone-50 py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-slate-950"
                 />
               </div>
             </div>
@@ -135,11 +78,11 @@ export default function LoginPage() {
             {/* Password */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-sm font-medium text-gray-700">Mot de passe</label>
-                <a href="/forgot-password" className="text-xs text-blue-600 hover:underline">Mot de passe oublié ?</a>
+                <label className="block text-sm font-medium text-slate-700">Mot de passe</label>
+                <Link href="/forgot-password" className="text-xs text-slate-600 transition-colors hover:text-slate-950">Mot de passe oublié ?</Link>
               </div>
               <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
@@ -150,12 +93,12 @@ export default function LoginPage() {
                   onChange={e => setPassword(e.target.value)}
                   placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
                   required
-                  className="w-full pl-10 pr-10 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all"
+                  className="w-full rounded-2xl border border-slate-300 bg-stone-50 py-3 pl-10 pr-10 text-sm text-slate-900 outline-none transition focus:border-slate-950"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPwd(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-700"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     {showPwd
@@ -171,7 +114,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm shadow-blue-200"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:bg-slate-400"
             >
               {loading ? (
                 <>
@@ -185,18 +128,17 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="text-center text-sm text-gray-400 mt-8">
-            <Link href="/" className="text-gray-500 hover:text-blue-600 hover:underline mr-2">
+          <p className="mt-8 text-center text-sm text-slate-400">
+            <Link href="/" className="mr-2 text-slate-500 transition-colors hover:text-slate-950">
               Retour a l&apos;accueil
             </Link>
-            <span className="text-gray-300">•</span>{' '}
+            <span className="text-slate-300">•</span>{' '}
             Pas encore de compte ?{' '}
-            <Link href="/register" className="text-blue-600 font-medium hover:underline">
+            <Link href="/register" className="font-medium text-slate-950 transition-colors hover:text-sky-700">
               S&apos;inscrire gratuitement
             </Link>
           </p>
-        </div>
       </div>
-    </div>
+    </AuthShell>
   );
 }

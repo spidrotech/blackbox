@@ -8,35 +8,40 @@ export default function AboutPage() {
   return (
     <MarketingLayout>
       {/* Hero */}
-      <section className="bg-gradient-to-br from-blue-950 via-blue-900 to-blue-800 text-white py-20 relative overflow-hidden">
-        <div className="absolute -top-20 -left-20 w-80 h-80 rounded-full bg-blue-700/30 blur-3xl" />
-        <div className="absolute bottom-0 right-0 w-96 h-96 rounded-full bg-sky-500/20 blur-3xl" />
-        <div className="relative z-10 max-w-3xl mx-auto px-6 text-center">
-          <h1 className="text-4xl md:text-5xl font-extrabold mb-4">{ABOUT.title}</h1>
-          <p className="text-blue-200 text-lg max-w-xl mx-auto">{ABOUT.subtitle}</p>
+      <section className="relative overflow-hidden border-b border-slate-200 bg-stone-50 py-20">
+        <div className="absolute -left-16 top-8 h-56 w-56 rounded-full bg-sky-100/80 blur-3xl" />
+        <div className="absolute bottom-0 right-0 h-64 w-64 rounded-full bg-slate-200/70 blur-3xl" />
+        <div className="relative z-10 mx-auto max-w-4xl px-6 text-center">
+          <span className="inline-flex rounded-full border border-sky-200 bg-white px-4 py-1.5 text-sm font-medium text-sky-700 shadow-sm">
+            A propos de Gestar
+          </span>
+          <h1 className="mt-6 text-4xl font-black tracking-tight text-slate-950 md:text-5xl">{ABOUT.title}</h1>
+          <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-600">{ABOUT.subtitle}</p>
         </div>
       </section>
 
       {/* Mission */}
-      <section className="max-w-3xl mx-auto px-6 py-16">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">{ABOUT.mission.title}</h2>
-        <p className="text-gray-600 leading-relaxed">{ABOUT.mission.text}</p>
+      <section className="mx-auto max-w-5xl px-6 py-16">
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm md:p-10">
+          <h2 className="mb-4 text-2xl font-black text-slate-950">{ABOUT.mission.title}</h2>
+          <p className="leading-8 text-slate-600">{ABOUT.mission.text}</p>
+        </div>
       </section>
 
       {/* Values */}
-      <section className="bg-gray-50 py-16">
+      <section className="bg-stone-100 py-16">
         <div className="max-w-5xl mx-auto px-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-10 text-center">Nos valeurs</h2>
+          <h2 className="mb-10 text-center text-2xl font-black text-slate-950">Nos valeurs</h2>
           <div className="grid md:grid-cols-2 gap-6">
             {ABOUT.values.map((v, i) => (
-              <div key={v.title} className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-shadow">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center mb-4">
-                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div key={v.title} className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg">
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-950">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={VALUE_ICONS[i]} />
                   </svg>
                 </div>
-                <h3 className="font-bold text-gray-900 mb-1">{v.title}</h3>
-                <p className="text-sm text-gray-500 leading-relaxed">{v.text}</p>
+                <h3 className="mb-1 font-bold text-slate-950">{v.title}</h3>
+                <p className="text-sm leading-relaxed text-slate-500">{v.text}</p>
               </div>
             ))}
           </div>
@@ -44,13 +49,15 @@ export default function AboutPage() {
       </section>
 
       {/* Team */}
-      <section className="max-w-3xl mx-auto px-6 py-16">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">{ABOUT.team.title}</h2>
-        <p className="text-gray-600 leading-relaxed mb-8">{ABOUT.team.text}</p>
-        <Link href="/register" className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-semibold transition-colors">
+      <section className="mx-auto max-w-5xl px-6 py-16">
+        <div className="rounded-[2rem] border border-slate-200 bg-slate-950 p-8 text-white shadow-sm md:p-10">
+          <h2 className="mb-4 text-2xl font-black">{ABOUT.team.title}</h2>
+          <p className="mb-8 max-w-2xl leading-8 text-slate-300">{ABOUT.team.text}</p>
+          <Link href="/register" className="inline-flex items-center gap-2 rounded-2xl bg-white px-6 py-3 font-semibold text-slate-950 transition-colors hover:bg-slate-100">
           {ABOUT.cta}
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
         </Link>
+        </div>
       </section>
     </MarketingLayout>
   );

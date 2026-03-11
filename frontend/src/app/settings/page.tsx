@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { CompanyLookupField } from '@/components/company/CompanyLookupField';
 import { API_BASE_URL, settingsService } from '@/services/api';
+import { CompanyLookupResult } from '@/types';
 
 type MainTab = 'entreprise' | 'documents' | 'numerotation' | 'utilisateurs' | 'connexion';
 type DocumentTab = 'entetes' | 'pieds' | 'conditions' | 'cgv';
@@ -469,6 +471,18 @@ export default function SettingsPage() {
     }
   };
 
+  const applyCompanyLookup = (result: CompanyLookupResult) => {
+    patchCompany({
+      name: result.name,
+      siret: result.siret || '',
+      address: result.address || '',
+      postal_code: result.postal_code || '',
+      city: result.city || '',
+      country: result.country || 'France',
+      ape_code: result.ape_code || '',
+    });
+  };
+
   const updateMember = async (member: TeamMember) => {
     try {
       const r = await settingsService.updateTeamMember(member.id, {
@@ -736,11 +750,13 @@ export default function SettingsPage() {
                 >
                   <div className="space-y-3">
                     <Field label="Nom de l'entreprise *">
-                      <input
-                        className={inputCls}
-                        placeholder="Ex : BTP Pro SAS"
+                      <CompanyLookupField
                         value={company.name || ''}
-                        onChange={(e) => patchCompany({ name: e.target.value })}
+                        onValueChange={(value) => patchCompany({ name: value })}
+                        onSelect={applyCompanyLookup}
+                        placeholder="Ex : BTP Pro SAS"
+                        inputClassName={inputCls}
+                        helperText="Recherchez l'entreprise pour préremplir le SIRET, l'adresse, la ville et le code APE."
                       />
                     </Field>
                     <Field label="Adresse">

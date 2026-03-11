@@ -28,6 +28,7 @@ import {
   PriceLibraryImportResult,
   DashboardData,
   SituationsSummary,
+  CompanyLookupResult,
 } from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api/v1';
@@ -173,13 +174,20 @@ export const authService = {
     return !!localStorage.getItem('access_token');
   },
 
-  async forgotPassword(email: string): Promise<ApiResponse<null>> {
-    const response = await api.post<ApiResponse<null>>('/auth/forgot-password', { email });
+  async forgotPassword(email: string): Promise<ApiResponse<{ email_sent?: boolean; reset_url?: string } | null>> {
+    const response = await api.post<ApiResponse<{ email_sent?: boolean; reset_url?: string } | null>>('/auth/forgot-password', { email });
     return response.data;
   },
 
   async resetPassword(token: string, password: string): Promise<ApiResponse<null>> {
     const response = await api.post<ApiResponse<null>>('/auth/reset-password', { token, password });
+    return response.data;
+  },
+
+  async searchCompanies(query: string): Promise<ApiResponse<CompanyLookupResult[]>> {
+    const response = await api.get<ApiResponse<CompanyLookupResult[]>>('/auth/company-search', {
+      params: { q: query },
+    });
     return response.data;
   },
 };
@@ -803,6 +811,12 @@ export const dashboardService = {
 };
 
 export default api;
+
+export const companyLookupService = {
+  async search(query: string): Promise<ApiResponse<CompanyLookupResult[]>> {
+    return authService.searchCompanies(query);
+  },
+};
 
 // Settings service
 export const settingsService = {

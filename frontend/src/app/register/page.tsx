@@ -3,7 +3,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { AuthShell } from '@/components/auth/AuthShell';
+import { CompanyLookupField } from '@/components/company/CompanyLookupField';
 import { authService } from '@/services/api';
+import { CompanyLookupResult } from '@/types';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -15,6 +18,12 @@ export default function RegisterPage() {
     last_name: '',
     phone: '',
     company_name: '',
+    company_siret: '',
+    company_address: '',
+    company_postal_code: '',
+    company_city: '',
+    company_country: 'France',
+    company_ape_code: '',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -47,6 +56,12 @@ export default function RegisterPage() {
         last_name: formData.last_name,
         phone: formData.phone,
         company_name: formData.company_name,
+        company_siret: formData.company_siret,
+        company_address: formData.company_address,
+        company_postal_code: formData.company_postal_code,
+        company_city: formData.company_city,
+        company_country: formData.company_country,
+        company_ape_code: formData.company_ape_code,
       });
       if (response.success) {
         router.push('/login?registered=true');
@@ -69,80 +84,38 @@ export default function RegisterPage() {
     </svg>
   );
 
+  const handleCompanySelect = (company: CompanyLookupResult) => {
+    setFormData((prev) => ({
+      ...prev,
+      company_name: company.name,
+      company_siret: company.siret || '',
+      company_address: company.address || '',
+      company_postal_code: company.postal_code || '',
+      company_city: company.city || '',
+      company_country: company.country || 'France',
+      company_ape_code: company.ape_code || '',
+    }));
+  };
+
   return (
-    <div className="min-h-screen flex">
-      {/* Left panel — branding */}
-      <div className="hidden lg:flex flex-col w-[42%] bg-gradient-to-br from-blue-950 via-blue-900 to-blue-800 relative overflow-hidden">
-        <div className="absolute -top-20 -left-20 w-80 h-80 rounded-full bg-blue-700/30 blur-3xl" />
-        <div className="absolute top-1/3 right-0 w-96 h-96 rounded-full bg-sky-500/20 blur-3xl" />
-        <div className="absolute bottom-0 left-1/4 w-64 h-64 rounded-full bg-blue-600/20 blur-3xl" />
-        <div className="absolute inset-0 opacity-[0.04]"
-          style={{ backgroundImage: 'linear-gradient(90deg,#fff 1px,transparent 1px),linear-gradient(#fff 1px,transparent 1px)', backgroundSize: '40px 40px' }} />
-
-        <div className="relative z-10 flex flex-col h-full px-10 py-10">
-          <Link href="/" className="flex items-center gap-3 w-fit">
-            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-            </div>
-            <span className="text-2xl font-bold text-white tracking-tight">Gestar</span>
-          </Link>
-
-          <div className="mt-auto mb-auto pt-16">
-            <p className="text-blue-300 text-sm font-semibold uppercase tracking-widest mb-4">Logiciel BTP & Artisans</p>
-            <h1 className="text-3xl font-extrabold text-white leading-tight mb-5">
-              Démarrez<br />
-              <span className="text-sky-300">en 2 minutes</span>
-            </h1>
-            <p className="text-blue-200 text-sm leading-relaxed max-w-xs">
-              Créez votre compte et commencez à gérer vos devis, factures et chantiers immédiatement.
-            </p>
-
-            <ul className="mt-8 space-y-3">
-              {[
-                'Devis professionnels en quelques clics',
-                'Facturation automatisée et suivi des paiements',
-                'Gestion des chantiers et des clients',
-                'Fonctionnalités BTP : acomptes, situations, retenue de garantie',
-              ].map((f, i) => (
-                <li key={i} className="flex items-center gap-2.5 text-blue-100 text-sm">
-                  <span className="w-4 h-4 rounded-full bg-sky-400/30 border border-sky-400/50 flex items-center justify-center shrink-0">
-                    <svg className="w-2.5 h-2.5 text-sky-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </span>
-                  {f}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <p className="text-blue-400/60 text-xs">&copy; {new Date().getFullYear()} Gestar. Tous droits réservés.</p>
-        </div>
-      </div>
-
-      {/* Right panel — form */}
-      <div className="flex-1 flex flex-col justify-center items-center px-8 py-10 bg-white overflow-y-auto">
-        {/* Mobile logo */}
-        <Link href="/" className="lg:hidden flex items-center gap-2 mb-6">
-          <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-            </svg>
-          </div>
-          <span className="text-xl font-bold text-gray-900">Gestar</span>
-        </Link>
-
-        <div className="w-full max-w-md">
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">Créer un compte</h2>
-          <p className="text-gray-500 text-sm mb-7">Commencez gratuitement, sans carte bancaire.</p>
+    <AuthShell
+      badge="Création de compte"
+      title="Démarrez vite," 
+      accent="sans friction"
+      description="Créez votre espace Gestar et mettez en place votre gestion commerciale en quelques minutes, sans carte bancaire et sans configuration lourde."
+      points={[
+        'Essai gratuit pour structurer devis, factures et clients.',
+        'Parcours simple pour les artisans et PME du bâtiment.',
+        'Mise en route rapide avant votre première production.',
+      ]}
+    >
+      <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.35)] sm:p-10">
+        <h2 className="mb-1 text-3xl font-black text-slate-950">Créer un compte</h2>
+        <p className="mb-7 text-sm text-slate-500">Commencez gratuitement, sans carte bancaire.</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
+              <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -153,7 +126,7 @@ export default function RegisterPage() {
             {/* Name row */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Prénom</label>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Prénom</label>
                 <input
                   type="text"
                   name="first_name"
@@ -161,11 +134,11 @@ export default function RegisterPage() {
                   onChange={handleChange}
                   placeholder="Jean"
                   required
-                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all"
+                  className="w-full rounded-2xl border border-slate-300 bg-stone-50 px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-950"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Nom</label>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">Nom</label>
                 <input
                   type="text"
                   name="last_name"
@@ -173,38 +146,45 @@ export default function RegisterPage() {
                   onChange={handleChange}
                   placeholder="Dupont"
                   required
-                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all"
+                  className="w-full rounded-2xl border border-slate-300 bg-stone-50 px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-950"
                 />
               </div>
             </div>
 
             {/* Company */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Nom de l&apos;entreprise</label>
-              <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Nom de l&apos;entreprise</label>
+              <CompanyLookupField
+                value={formData.company_name}
+                onValueChange={(value) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    company_name: value,
+                    company_siret: '',
+                    company_address: '',
+                    company_postal_code: '',
+                    company_city: '',
+                    company_country: 'France',
+                    company_ape_code: '',
+                  }))
+                }
+                onSelect={handleCompanySelect}
+                placeholder="Recherchez votre entreprise"
+                inputClassName="w-full rounded-2xl border border-slate-300 bg-stone-50 py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-slate-950"
+                helperText="Tapez au moins 3 caractères pour rechercher l'entreprise et préremplir ses informations légales." 
+              />
+              {formData.company_siret && (
+                <div className="mt-2 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+                  Entreprise trouvée: {formData.company_siret}{formData.company_city ? ` • ${formData.company_city}` : ''}
                 </div>
-                <input
-                  type="text"
-                  name="company_name"
-                  value={formData.company_name}
-                  onChange={handleChange}
-                  placeholder="Mon Entreprise SARL"
-                  required
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all"
-                />
-              </div>
+              )}
             </div>
 
             {/* Email */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Adresse email</label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Adresse email</label>
               <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
                   </svg>
@@ -216,16 +196,16 @@ export default function RegisterPage() {
                   onChange={handleChange}
                   placeholder="votre@email.com"
                   required
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all"
+                  className="w-full rounded-2xl border border-slate-300 bg-stone-50 py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-slate-950"
                 />
               </div>
             </div>
 
             {/* Phone */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Téléphone <span className="text-gray-400 font-normal">(optionnel)</span></label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Téléphone <span className="font-normal text-slate-400">(optionnel)</span></label>
               <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                   </svg>
@@ -236,16 +216,16 @@ export default function RegisterPage() {
                   value={formData.phone}
                   onChange={handleChange}
                   placeholder="06 12 34 56 78"
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all"
+                  className="w-full rounded-2xl border border-slate-300 bg-stone-50 py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition focus:border-slate-950"
                 />
               </div>
             </div>
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Mot de passe</label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Mot de passe</label>
               <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
@@ -257,9 +237,9 @@ export default function RegisterPage() {
                   onChange={handleChange}
                   placeholder="Minimum 6 caractères"
                   required
-                  className="w-full pl-10 pr-10 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all"
+                  className="w-full rounded-2xl border border-slate-300 bg-stone-50 py-3 pl-10 pr-10 text-sm text-slate-900 outline-none transition focus:border-slate-950"
                 />
-                <button type="button" onClick={() => setShowPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <button type="button" onClick={() => setShowPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-700">
                   <EyeIcon open={showPwd} />
                 </button>
               </div>
@@ -267,9 +247,9 @@ export default function RegisterPage() {
 
             {/* Confirm password */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirmer le mot de passe</label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Confirmer le mot de passe</label>
               <div className="relative">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                   </svg>
@@ -281,9 +261,9 @@ export default function RegisterPage() {
                   onChange={handleChange}
                   placeholder="••••••••"
                   required
-                  className="w-full pl-10 pr-10 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all"
+                  className="w-full rounded-2xl border border-slate-300 bg-stone-50 py-3 pl-10 pr-10 text-sm text-slate-900 outline-none transition focus:border-slate-950"
                 />
-                <button type="button" onClick={() => setShowConfirm(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <button type="button" onClick={() => setShowConfirm(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-700">
                   <EyeIcon open={showConfirm} />
                 </button>
               </div>
@@ -292,7 +272,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm shadow-blue-200 mt-2"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:bg-slate-400"
             >
               {loading ? (
                 <>
@@ -305,26 +285,25 @@ export default function RegisterPage() {
               ) : "Créer mon compte"}
             </button>
 
-            <p className="text-center text-xs text-gray-400">
+            <p className="text-center text-xs text-slate-400">
               En créant un compte, vous acceptez nos{' '}
-              <a href="#" className="text-blue-600 hover:underline">CGU</a>{' '}
+              <Link href="/cgu" className="text-slate-700 transition-colors hover:text-slate-950">CGU</Link>{' '}
               et notre{' '}
-              <a href="#" className="text-blue-600 hover:underline">politique de confidentialité</a>.
+              <Link href="/privacy" className="text-slate-700 transition-colors hover:text-slate-950">politique de confidentialité</Link>.
             </p>
           </form>
 
-          <p className="text-center text-sm text-gray-400 mt-6">
-            <Link href="/" className="text-gray-500 hover:text-blue-600 hover:underline mr-2">
+          <p className="mt-6 text-center text-sm text-slate-400">
+            <Link href="/" className="mr-2 text-slate-500 transition-colors hover:text-slate-950">
               Retour a l&apos;accueil
             </Link>
-            <span className="text-gray-300">•</span>{' '}
+            <span className="text-slate-300">•</span>{' '}
             Déjà un compte ?{' '}
-            <Link href="/login" className="text-blue-600 font-medium hover:underline">
+            <Link href="/login" className="font-medium text-slate-950 transition-colors hover:text-sky-700">
               Se connecter
             </Link>
           </p>
-        </div>
       </div>
-    </div>
+    </AuthShell>
   );
 }

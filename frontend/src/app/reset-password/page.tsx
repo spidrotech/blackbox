@@ -3,6 +3,7 @@
 import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { AuthShell } from '@/components/auth/AuthShell';
 import { authService } from '@/services/api';
 
 const CONTENT = {
@@ -52,77 +53,62 @@ function ResetPasswordForm() {
   };
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left panel */}
-      <div className="hidden lg:flex flex-col w-[55%] bg-gradient-to-br from-blue-950 via-blue-900 to-blue-800 relative overflow-hidden">
-        <div className="absolute -top-20 -left-20 w-80 h-80 rounded-full bg-blue-700/30 blur-3xl" />
-        <div className="absolute top-1/3 right-0 w-96 h-96 rounded-full bg-sky-500/20 blur-3xl" />
-        <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'linear-gradient(90deg,#fff 1px,transparent 1px),linear-gradient(#fff 1px,transparent 1px)', backgroundSize: '40px 40px' }} />
-        <div className="relative z-10 flex flex-col h-full px-12 py-10">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-            </div>
-            <span className="text-2xl font-bold text-white tracking-tight">Gestar</span>
-          </Link>
-          <div className="mt-auto mb-auto pt-16 max-w-sm">
-            <h1 className="text-3xl font-extrabold text-white leading-tight mb-4">
-              {CONTENT.brandTitle}<br /><span className="text-sky-300">{CONTENT.brandAccent}</span>
-            </h1>
-            <p className="text-blue-200 text-sm leading-relaxed">{CONTENT.brandDesc}</p>
-          </div>
-          <p className="text-blue-400/60 text-xs">&copy; {new Date().getFullYear()} {CONTENT.copyright}</p>
-        </div>
-      </div>
-
-      {/* Right panel */}
-      <div className="flex-1 flex flex-col justify-center items-center px-8 py-12 bg-white">
-        <div className="w-full max-w-sm">
+    <AuthShell
+      badge="Nouveau mot de passe"
+      title={CONTENT.brandTitle}
+      accent={CONTENT.brandAccent}
+      description={CONTENT.brandDesc}
+      points={[
+        'Choisissez un mot de passe robuste pour sécuriser votre accès.',
+        'Le changement est appliqué immédiatement après validation.',
+        'Vous pourrez ensuite vous reconnecter normalement.',
+      ]}
+    >
+      <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.35)] sm:p-10">
           {done ? (
             <div className="text-center">
-              <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-5 border border-emerald-100">
+              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50">
                 <svg className="w-8 h-8 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
               </div>
-              <h2 className="text-xl font-bold text-gray-900 mb-2">{CONTENT.successTitle}</h2>
-              <p className="text-sm text-gray-500 mb-6">{CONTENT.successMsg}</p>
-              <Link href="/login" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">{CONTENT.backLogin}</Link>
+              <h2 className="mb-2 text-2xl font-black text-slate-950">{CONTENT.successTitle}</h2>
+              <p className="mb-6 text-sm leading-6 text-slate-500">{CONTENT.successMsg}</p>
+              <Link href="/login" className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800">{CONTENT.backLogin}</Link>
             </div>
           ) : (
             <>
-              <h2 className="text-2xl font-bold text-gray-900 mb-1">{CONTENT.title}</h2>
-              <p className="text-gray-500 text-sm mb-8">{CONTENT.subtitle}</p>
+              <h2 className="mb-1 text-3xl font-black text-slate-950">{CONTENT.title}</h2>
+              <p className="mb-8 text-sm text-slate-500">{CONTENT.subtitle}</p>
 
               {error && (
-                <div className="bg-red-50 text-red-700 text-sm rounded-xl px-4 py-3 mb-4 border border-red-100">{error}</div>
+                <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
               )}
 
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{CONTENT.label}</label>
-                  <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder={CONTENT.placeholder} required minLength={8} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all" />
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">{CONTENT.label}</label>
+                  <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder={CONTENT.placeholder} required minLength={8} className="w-full rounded-2xl border border-slate-300 bg-stone-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-950" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{CONTENT.confirm}</label>
-                  <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder={CONTENT.placeholder} required minLength={8} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all" />
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">{CONTENT.confirm}</label>
+                  <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder={CONTENT.placeholder} required minLength={8} className="w-full rounded-2xl border border-slate-300 bg-stone-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-950" />
                 </div>
-                <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm shadow-blue-200">
+                <button type="submit" disabled={loading} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:bg-slate-400">
                   {loading ? CONTENT.submitting : CONTENT.submit}
                 </button>
               </form>
-              <p className="text-center text-sm text-gray-400 mt-8">
-                <Link href="/" className="text-gray-500 hover:text-blue-600 hover:underline">{CONTENT.backHome}</Link>
+              <p className="mt-8 text-center text-sm text-slate-400">
+                <Link href="/" className="text-slate-500 transition-colors hover:text-slate-950">{CONTENT.backHome}</Link>
               </p>
             </>
           )}
-        </div>
       </div>
-    </div>
+    </AuthShell>
   );
 }
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>}>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-stone-50"><div className="h-8 w-8 animate-spin rounded-full border-b-2 border-slate-950" /></div>}>
       <ResetPasswordForm />
     </Suspense>
   );

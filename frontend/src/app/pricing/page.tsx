@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { MarketingFooter } from '@/components/marketing/MarketingFooter';
+import { MarketingLayout } from '@/components/marketing/MarketingLayout';
 
 const pricingPlans = [
   {
@@ -32,46 +32,88 @@ const pricingPlans = [
 
 export default function PricingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <nav className="bg-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <Link href="/" className="text-2xl font-bold text-gray-900 hover:text-blue-600 transition-colors">GESTAR</Link>
-            <div className="hidden md:flex items-center space-x-8">
-              <Link href="/" className="text-gray-700 hover:text-blue-600 font-medium">Accueil</Link>
-              <Link href="/#features" className="text-gray-700 hover:text-blue-600 font-medium">Fonctionnalites</Link>
-              <Link href="/pricing" className="text-blue-600 font-medium border-b-2 border-blue-600">Tarifs</Link>
-              <Link href="/contact" className="text-gray-700 hover:text-blue-600 font-medium">Contact</Link>
+    <MarketingLayout>
+      <section className="relative overflow-hidden border-b border-slate-200 bg-stone-50 px-4 py-20 sm:px-6 lg:px-8">
+        <div className="absolute left-[-5rem] top-8 h-48 w-48 rounded-full bg-sky-100/80 blur-3xl" />
+        <div className="absolute right-[-5rem] top-20 h-56 w-56 rounded-full bg-slate-200/70 blur-3xl" />
+        <div className="relative mx-auto max-w-6xl">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,1.1fr)_380px] lg:items-center">
+            <div>
+              <span className="inline-flex rounded-full border border-sky-200 bg-white px-4 py-1.5 text-sm font-medium text-sky-700 shadow-sm">
+                Tarification claire
+              </span>
+              <h1 className="mt-6 text-4xl font-black tracking-tight text-slate-950 md:text-5xl">
+                Des offres simples pour accompagner votre croissance.
+              </h1>
+              <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
+                Choisissez un plan adapte a votre structure, avec une mise en route rapide, un support humain et une progression sans friction quand l'activite monte.
+              </p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                {['Essai gratuit 14 jours', 'Sans engagement', 'Support base en France'].map((item) => (
+                  <span key={item} className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm">
+                    {item}
+                  </span>
+                ))}
+              </div>
             </div>
-            <Link href="/login" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">Se connecter</Link>
+
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.35)]">
+              <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-400">Ce qui est inclus</p>
+              <div className="mt-5 space-y-4">
+                {[
+                  ['Demarrage rapide', 'Configuration initiale et prise en main en moins de 10 minutes.'],
+                  ['Documents centralises', 'Devis, factures et suivi client accessibles dans une interface unique.'],
+                  ['Accompagnement evolutif', 'Passez d\'un plan a l\'autre sans migration ni reprise manuelle.'],
+                ].map(([title, text]) => (
+                  <div key={title} className="rounded-2xl border border-slate-200 bg-stone-50 p-4">
+                    <p className="font-semibold text-slate-950">{title}</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-500">{text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-      </nav>
+      </section>
 
-      <section className="py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto text-center mb-16">
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">Des tarifs clairs pour votre activite</h1>
-          <p className="text-xl text-gray-600">Choisissez un plan adapte a votre taille dentreprise, avec une montée en puissance simple quand votre activite evolue.</p>
-        </div>
-
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
+      <section className="bg-stone-100 px-4 py-20 sm:px-6 lg:px-8">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 md:grid-cols-3 items-stretch">
           {pricingPlans.map((plan) => (
-            <div key={plan.name} className={`bg-white p-8 rounded-2xl shadow-lg ${plan.popular ? 'ring-2 ring-blue-600 scale-105' : ''}`}>
+            <div
+              key={plan.name}
+              className={`rounded-[1.75rem] border p-8 shadow-sm transition-all hover:-translate-y-1 hover:shadow-xl ${
+                plan.popular
+                  ? 'border-slate-950 bg-slate-950 text-white'
+                  : 'border-slate-200 bg-white text-slate-900'
+              }`}
+            >
               {plan.popular && (
-                <div className="bg-blue-600 text-white text-sm font-medium px-3 py-1 rounded-full inline-block mb-4">Le plus populaire</div>
+                <div className="mb-4 inline-flex rounded-full bg-white/10 px-3 py-1 text-sm font-medium text-white">
+                  Le plus populaire
+                </div>
               )}
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">{plan.name}</h2>
-              <p className="text-sm text-gray-500 mb-5">{plan.description}</p>
-              <div className="text-4xl font-bold text-blue-600 mb-6">{plan.price}<span className="text-lg text-gray-600">{plan.period}</span></div>
-              <ul className="space-y-3 mb-8">
+              <h2 className="text-2xl font-bold">{plan.name}</h2>
+              <p className={`mt-2 text-sm ${plan.popular ? 'text-slate-300' : 'text-slate-500'}`}>{plan.description}</p>
+              <div className="mt-6">
+                <span className="text-4xl font-black">{plan.price}</span>
+                <span className={`ml-1 text-lg ${plan.popular ? 'text-slate-300' : 'text-slate-400'}`}>{plan.period}</span>
+              </div>
+              <ul className="mt-8 space-y-3">
                 {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-center text-gray-600">
-                    <span className="text-green-500 mr-2">✓</span>
-                    {feature}
+                  <li key={feature} className="flex items-start gap-3 text-sm leading-6">
+                    <span className={`mt-1 h-2.5 w-2.5 rounded-full ${plan.popular ? 'bg-sky-300' : 'bg-emerald-500'}`} />
+                    <span>{feature}</span>
                   </li>
                 ))}
               </ul>
-              <Link href="/register" className={`block w-full py-3 px-6 rounded-lg text-center font-medium transition-colors ${plan.popular ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-900'}`}>
+              <Link
+                href="/register"
+                className={`mt-10 block w-full rounded-2xl px-6 py-3 text-center font-semibold transition-colors ${
+                  plan.popular
+                    ? 'bg-white text-slate-950 hover:bg-slate-100'
+                    : 'bg-slate-950 text-white hover:bg-slate-800'
+                }`}
+              >
                 Commencer
               </Link>
             </div>
@@ -79,24 +121,20 @@ export default function PricingPage() {
         </div>
       </section>
 
-      <section className="py-4 pb-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-lg p-8 grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
-          <div>
-            <div className="text-2xl font-bold text-gray-900">14 jours</div>
-            <div className="text-sm text-gray-500 mt-1">Dessai gratuit</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-gray-900">Sans engagement</div>
-            <div className="text-sm text-gray-500 mt-1">Changez de plan quand vous voulez</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-gray-900">Support humain</div>
-            <div className="text-sm text-gray-500 mt-1">Une equipe disponible pour vous aider</div>
-          </div>
+      <section className="border-t border-slate-200 bg-white px-4 py-16 sm:px-6 lg:px-8">
+        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-4 md:grid-cols-3">
+          {[
+            ['14 jours', 'Essai gratuit pour tester les flux et documents.'],
+            ['Sans engagement', 'Montez ou ajustez votre plan au rythme de l\'entreprise.'],
+            ['Support humain', 'Une equipe disponible pour repondre rapidement.'],
+          ].map(([title, text]) => (
+            <div key={title} className="rounded-3xl border border-slate-200 bg-stone-50 p-6 text-center shadow-sm">
+              <p className="text-2xl font-black text-slate-950">{title}</p>
+              <p className="mt-2 text-sm leading-6 text-slate-500">{text}</p>
+            </div>
+          ))}
         </div>
       </section>
-
-      <MarketingFooter />
-    </div>
+    </MarketingLayout>
   );
 }

@@ -13,8 +13,16 @@ from app.core.security import (
     get_current_user_required,
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
+from app.core.config import settings
+from app.services.email_service import build_password_reset_link, send_password_reset_email
+from app.services.company_lookup_service import search_companies
 
 router = APIRouter()
+
+
+@router.get("/company-search", response_model=dict)
+def company_search(q: str):
+    return {"success": True, "data": search_companies(q)}
 
 
 @router.post("/register", response_model=dict)
@@ -56,8 +64,15 @@ def register(user_data: UserCreate, session: Session = Depends(get_session)):
         session.refresh(user)
         
         # Créer une entreprise par défaut
+        company_name = (user_data.company_name or "").strip() or f"Entreprise de {user.full_name}"
         company = Company(
-            name=f"Entreprise de {user.full_name}",
+            name=company_name,
+            siret=(user_data.company_siret or "").strip() or None,
+            address=(user_data.company_address or "").strip() or None,
+            postal_code=(user_data.company_postal_code or "").strip() or None,
+            city=(user_data.company_city or "").strip() or None,
+            country=(user_data.company_country or "").strip() or "France",
+            ape_code=(user_data.company_ape_code or "").strip() or None,
             owner_id=user.id,
         )
         session.add(company)
@@ -215,7 +230,7 @@ class ResetPasswordRequest(BaseModel):
     password: str
 
 
-RESET_TOKEN_EXPIRE_MINUTES = 30
+RESET_TOKEN_EXPIRE_MINUTES = settings.RESET_TOKEN_EXPIRE_MINUTES
 
 
 @router.post("/forgot-password", response_model=dict)
@@ -225,6 +240,11 @@ def forgot_password(
 ):
     """Demande de réinitialisation de mot de passe.
     Génère un token et le stocke (en production, envoyer par email)."""
+    response: dict = {
+        "success": True,
+        "message": "Si un compte existe avec cet email, un lien de réinitialisation a été envoyé.",
+    }
+
     user = session.exec(select(User).where(User.email == payload.email)).first()
     if user:
         token = secrets.token_urlsafe(32)
@@ -232,12 +252,21 @@ def forgot_password(
         user.reset_token_expires = datetime.utcnow() + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
         session.add(user)
         session.commit()
-        # TODO: envoyer l'email avec le lien /reset-password?token=...
-        # Pour le dev, on log le token
-        print(f"[DEV] Reset token for {user.email}: {token}")
+        reset_link = build_password_reset_link(token)
+        email_sent = send_password_reset_email(user.email, reset_link)
 
-    # Toujours retourner un succès pour ne pas révéler l'existence d'un compte
-    return {"success": True, "message": "Si un compte existe avec cet email, un lien de réinitialisation a été envoyé."}
+        if not email_sent:
+            print(f"[DEV] Reset link for {user.email}: {reset_link}")
+
+        if email_sent:
+            response["data"] = {"email_sent": True}
+        elif settings.EXPOSE_PASSWORD_RESET_LINK or settings.APP_ENV.lower() != "production":
+            response["data"] = {
+                "email_sent": False,
+                "reset_url": reset_link,
+            }
+
+    return response
 
 
 @router.post("/reset-password", response_model=dict)

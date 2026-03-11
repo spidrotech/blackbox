@@ -71,6 +71,25 @@ export interface UserCreate {
   role?: UserRole;
   hourly_rate?: number;
   company_name?: string;
+  company_siret?: string;
+  company_address?: string;
+  company_postal_code?: string;
+  company_city?: string;
+  company_country?: string;
+  company_ape_code?: string;
+}
+
+export interface CompanyLookupResult {
+  name: string;
+  siren?: string;
+  siret?: string;
+  address?: string;
+  postal_code?: string;
+  city?: string;
+  country?: string;
+  ape_code?: string;
+  legal_form?: string;
+  is_rge?: boolean;
 }
 
 export interface LoginCredentials {

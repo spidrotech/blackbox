@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
-import { MarketingFooter } from '@/components/marketing/MarketingFooter';
+import { MarketingLayout } from '@/components/marketing/MarketingLayout';
 
 export default function Contact() {
   const [formData, setFormData] = useState({
@@ -40,188 +39,138 @@ export default function Contact() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Navigation */}
-      <nav className="bg-white shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <Link href="/" className="text-2xl font-bold text-gray-900 hover:text-blue-600">
-                GESTAR
-              </Link>
-            </div>
-            <div className="hidden md:flex items-center space-x-8">
-              <Link href="/" className="text-gray-700 hover:text-blue-600 font-medium">
-                Accueil
-              </Link>
-              <Link href="/#features" className="text-gray-700 hover:text-blue-600 font-medium">
-                Fonctionnalités
-              </Link>
-              <Link href="/pricing" className="text-gray-700 hover:text-blue-600 font-medium">
-                Tarifs
-              </Link>
-              <Link href="/contact" className="text-blue-600 font-medium border-b-2 border-blue-600">
-                Contact
-              </Link>
-            </div>
-            <div className="flex items-center">
-              <Link
-                href="/login"
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
-              >
-                Se connecter
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
+    <MarketingLayout>
+      <section className="relative overflow-hidden border-b border-slate-200 bg-stone-50 px-4 py-20 sm:px-6 lg:px-8">
+        <div className="absolute left-[-4rem] top-12 h-44 w-44 rounded-full bg-sky-100/80 blur-3xl" />
+        <div className="absolute right-[-4rem] bottom-0 h-56 w-56 rounded-full bg-slate-200/70 blur-3xl" />
+        <div className="relative mx-auto max-w-6xl">
+          <div className="grid gap-12 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] lg:items-start">
+            <div>
+              <span className="inline-flex rounded-full border border-sky-200 bg-white px-4 py-1.5 text-sm font-medium text-sky-700 shadow-sm">
+                Contact commercial et support
+              </span>
+              <h1 className="mt-6 text-4xl font-black tracking-tight text-slate-950 md:text-5xl">
+                Une equipe disponible pour vous repondre rapidement.
+              </h1>
+              <p className="mt-6 max-w-xl text-lg leading-8 text-slate-600">
+                Question produit, demo, accompagnement ou support: nous revenons vers vous sous 24 heures ouvrées avec une réponse claire et exploitable.
+              </p>
 
-      {/* Breadcrumb */}
-      <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center space-x-2 text-gray-600">
-            <Link href="/" className="hover:text-blue-600">Accueil</Link>
-            <span>/</span>
-            <span className="text-gray-900 font-medium">Contact</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Contact Header */}
-      <section className="py-16 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto text-center mb-16">
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
-            Nous sommes là pour vous aider
-          </h1>
-          <p className="text-xl text-gray-600 mb-8">
-            Vous avez des questions ? N&apos;hésitez pas à nous contacter. 
-            Notre équipe répondra à vos demandes dans les 24 heures.
-          </p>
-        </div>
-
-        {/* Contact Content */}
-        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
-          {/* Contact Info Cards */}
-          <div className="bg-white p-8 rounded-lg shadow-lg text-center">
-            <div className="text-4xl mb-4">📧</div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Email</h3>
-            <p className="text-gray-600">contact@gestar.fr</p>
-            <p className="text-sm text-gray-500 mt-2">Réponse en 24h</p>
-          </div>
-
-          <div className="bg-white p-8 rounded-lg shadow-lg text-center">
-            <div className="text-4xl mb-4">📞</div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Téléphone</h3>
-            <p className="text-gray-600">+33 1 23 45 67 89</p>
-            <p className="text-sm text-gray-500 mt-2">Lun-Ven 9h-18h</p>
-          </div>
-
-          <div className="bg-white p-8 rounded-lg shadow-lg text-center">
-            <div className="text-4xl mb-4">📍</div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">Adresse</h3>
-            <p className="text-gray-600">123 Rue de la Tech</p>
-            <p className="text-gray-600">75001 Paris, France</p>
-          </div>
-        </div>
-
-        {/* Contact Form */}
-        <div className="max-w-2xl mx-auto bg-white p-8 md:p-12 rounded-lg shadow-lg">
-          <h2 className="text-3xl font-bold text-gray-900 mb-8">Envoyez-nous un message</h2>
-
-          {submitted && (
-            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-green-800 font-medium">✓ Merci ! Votre message a été envoyé avec succès.</p>
-              <p className="text-green-700 text-sm mt-1">Nous vous répondrons dans les 24 heures.</p>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-900 mb-2">
-                  Nom complet
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  placeholder="Jean Dupont"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-900 mb-2">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                  placeholder="jean@example.com"
-                />
+              <div className="mt-10 grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+                {[
+                  ['Email', 'contact@gestar.fr', 'Reponse en 24h'],
+                  ['Telephone', '+33 1 23 45 67 89', 'Lun-Ven, 9h-18h'],
+                  ['Adresse', '123 Rue de la Tech, 75001 Paris', 'Rendez-vous sur demande'],
+                ].map(([title, value, hint]) => (
+                  <div key={title} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">{title}</p>
+                    <p className="mt-3 text-lg font-semibold text-slate-950">{value}</p>
+                    <p className="mt-1 text-sm text-slate-500">{hint}</p>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div>
-              <label htmlFor="subject" className="block text-sm font-medium text-gray-900 mb-2">
-                Sujet
-              </label>
-              <input
-                type="text"
-                id="subject"
-                name="subject"
-                value={formData.subject}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                placeholder="Comment pouvons-nous vous aider ?"
-              />
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.35)] md:p-10">
+              <h2 className="text-3xl font-black text-slate-950">Envoyez-nous un message</h2>
+              <p className="mt-3 text-sm leading-6 text-slate-500">
+                Décrivez votre besoin, votre contexte ou votre volume d'activité. Nous pourrons vous orienter vers la bonne réponse ou une demo pertinente.
+              </p>
+
+              {submitted && (
+                <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="font-medium text-emerald-800">Message envoyé avec succès.</p>
+                  <p className="mt-1 text-sm text-emerald-700">Nous vous répondrons dans les 24 heures ouvrées.</p>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <div>
+                    <label htmlFor="name" className="mb-2 block text-sm font-medium text-slate-900">
+                      Nom complet
+                    </label>
+                    <input
+                      type="text"
+                      id="name"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleChange}
+                      required
+                      className="w-full rounded-2xl border border-slate-300 bg-stone-50 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-950"
+                      placeholder="Jean Dupont"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="email" className="mb-2 block text-sm font-medium text-slate-900">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      id="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      required
+                      className="w-full rounded-2xl border border-slate-300 bg-stone-50 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-950"
+                      placeholder="jean@example.com"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="subject" className="mb-2 block text-sm font-medium text-slate-900">
+                    Sujet
+                  </label>
+                  <input
+                    type="text"
+                    id="subject"
+                    name="subject"
+                    value={formData.subject}
+                    onChange={handleChange}
+                    required
+                    className="w-full rounded-2xl border border-slate-300 bg-stone-50 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-950"
+                    placeholder="Comment pouvons-nous vous aider ?"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="message" className="mb-2 block text-sm font-medium text-slate-900">
+                    Message
+                  </label>
+                  <textarea
+                    id="message"
+                    name="message"
+                    value={formData.message}
+                    onChange={handleChange}
+                    required
+                    rows={6}
+                    className="w-full resize-none rounded-2xl border border-slate-300 bg-stone-50 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-950"
+                    placeholder="Décrivez votre besoin, votre équipe ou votre demande de démonstration."
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className={`w-full rounded-2xl px-6 py-3 font-semibold text-white transition-colors ${
+                    loading
+                      ? 'cursor-not-allowed bg-slate-400'
+                      : 'bg-slate-950 hover:bg-slate-800'
+                  }`}
+                >
+                  {loading ? 'Envoi en cours...' : 'Envoyer le message'}
+                </button>
+              </form>
+
+              <p className="mt-6 text-center text-sm text-slate-500">
+                Nous respectons votre vie privée. Vos données ne seront pas partagées.
+              </p>
             </div>
-
-            <div>
-              <label htmlFor="message" className="block text-sm font-medium text-gray-900 mb-2">
-                Message
-              </label>
-              <textarea
-                id="message"
-                name="message"
-                value={formData.message}
-                onChange={handleChange}
-                required
-                rows={6}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none"
-                placeholder="Détaillez votre demande..."
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className={`w-full py-3 px-6 rounded-lg text-white font-medium transition-colors ${
-                loading
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
-              }`}
-            >
-              {loading ? 'Envoi en cours...' : 'Envoyer le message'}
-            </button>
-          </form>
-
-          <p className="text-sm text-gray-500 text-center mt-6">
-            Nous respectons votre vie privée. Vos données ne seront pas partagées.
-          </p>
+          </div>
         </div>
       </section>
-
-      <MarketingFooter />
-    </div>
+    </MarketingLayout>
   );
 }
