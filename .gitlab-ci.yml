@@ -1,0 +1,26 @@
+stages:
+  - deploy
+
+deploy_to_sftp:
+  stage: deploy
+  image: alpine:latest
+  variables:
+    DEPLOY_PATH: /gestar
+  
+  before_script:
+    - apk add --no-cache lftp
+  
+  script:
+    # Deploy project files over FTP/FTPS to the target folder.
+    - |
+      lftp -u "$USER","$PASSWORD" "$HOST" << EOF
+      set ftp:ssl-allow true
+      set ftp:ssl-force false
+      set ssl:verify-certificate false
+      set ftp:passive-mode true
+      mkdir -p ${DEPLOY_PATH}
+      mirror --reverse --delete --verbose ./ ${DEPLOY_PATH}
+      bye
+      EOF
+  only:
+    - master
