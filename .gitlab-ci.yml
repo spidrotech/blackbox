@@ -5,7 +5,7 @@ deploy_to_sftp:
   stage: deploy
   image: alpine:latest
   variables:
-    DEPLOY_PATH: /gestar
+    DEPLOY_PATH: /home/ecoenec/gestar
   
   before_script:
     - apk add --no-cache lftp
